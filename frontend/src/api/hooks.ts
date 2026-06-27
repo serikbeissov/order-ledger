@@ -10,12 +10,17 @@ import type {
   Dashboard,
   Expense,
   ExpenseCategory,
+  Group,
   Investment,
   Investor,
   OrderDetail,
   OrderListItem,
   Paginated,
+  PermissionCatalogEntry,
+  RecurringDueItem,
+  RecurringExpense,
   Reserve,
+  UserAccount,
   WarehouseItem,
 } from "./types";
 
@@ -29,6 +34,17 @@ async function post<T>(url: string, body: unknown): Promise<T> {
   await ensureCsrf();
   const r = await api.post<T>(url, body);
   return r.data;
+}
+
+async function patch<T>(url: string, body: unknown): Promise<T> {
+  await ensureCsrf();
+  const r = await api.patch<T>(url, body);
+  return r.data;
+}
+
+async function del(url: string): Promise<void> {
+  await ensureCsrf();
+  await api.delete(url);
 }
 
 // --- клиенты -----------------------------------------------------------------
@@ -52,6 +68,18 @@ export function useCreateClient() {
   return useMutation({
     mutationFn: (body: Partial<ClientDetail>) => post<ClientDetail>("/clients/", body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["clients"] }),
+  });
+}
+
+export function useUpdateClient() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: number } & Record<string, unknown>) =>
+      patch<ClientDetail>(`/clients/${id}/`, body),
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: ["client", v.id] });
+      qc.invalidateQueries({ queryKey: ["clients"] });
+    },
   });
 }
 
@@ -92,6 +120,18 @@ export function useCreateOrder() {
   });
 }
 
+export function useUpdateOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: number } & Record<string, unknown>) =>
+      patch<OrderDetail>(`/orders/${id}/`, body),
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: ["order", v.id] });
+      qc.invalidateQueries({ queryKey: ["orders"] });
+    },
+  });
+}
+
 export function useOrderAction(orderId: number) {
   const qc = useQueryClient();
   const invalidate = () => {
@@ -101,6 +141,11 @@ export function useOrderAction(orderId: number) {
   return {
     addItem: useMutation({
       mutationFn: (body: unknown) => post(`/orders/${orderId}/items/`, body),
+      onSuccess: invalidate,
+    }),
+    updateItem: useMutation({
+      mutationFn: ({ iid, ...body }: { iid: number } & Record<string, unknown>) =>
+        patch(`/orders/${orderId}/items/${iid}/`, body),
       onSuccess: invalidate,
     }),
     addExpense: useMutation({
@@ -137,6 +182,15 @@ export function useCreateWarehouseItem() {
   });
 }
 
+export function useUpdateWarehouseItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: number } & Record<string, unknown>) =>
+      patch<WarehouseItem>(`/warehouse/${id}/`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["warehouse"] }),
+  });
+}
+
 // --- расходы -----------------------------------------------------------------
 export function useExpenses(params?: object) {
   return useQuery({
@@ -152,11 +206,71 @@ export function useExpenseCategories() {
   });
 }
 
+export function useRecurringDue(period: string) {
+  return useQuery({
+    queryKey: ["recurring-due", period],
+    queryFn: async () =>
+      (
+        await api.get<{ period: string; due: RecurringDueItem[] }>(
+          "/expenses/recurring_due/",
+          { params: { period } },
+        )
+      ).data,
+    retry: false,
+  });
+}
+
+// --- ежемесячные напоминания (шаблоны) ---------------------------------------
+export function useRecurringExpenses() {
+  return useQuery({
+    queryKey: ["recurring-expenses"],
+    queryFn: () => getList<RecurringExpense>("/recurring-expenses/"),
+  });
+}
+
+export function useCreateRecurring() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Partial<RecurringExpense>) =>
+      post<RecurringExpense>("/recurring-expenses/", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["recurring-expenses"] });
+      qc.invalidateQueries({ queryKey: ["recurring-due"] });
+    },
+  });
+}
+
+export function useUpdateRecurring() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: number } & Record<string, unknown>) =>
+      patch<RecurringExpense>(`/recurring-expenses/${id}/`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["recurring-expenses"] });
+      qc.invalidateQueries({ queryKey: ["recurring-due"] });
+    },
+  });
+}
+
+export function useDeleteRecurring() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => del(`/recurring-expenses/${id}/`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["recurring-expenses"] });
+      qc.invalidateQueries({ queryKey: ["recurring-due"] });
+    },
+  });
+}
+
 export function useCreateExpense() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: Partial<Expense>) => post<Expense>("/expenses/", body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["expenses"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["expenses"] });
+      qc.invalidateQueries({ queryKey: ["recurring-due"] });
+    },
   });
 }
 
@@ -233,7 +347,7 @@ export function useDashboard(period: string) {
 export function useUsers() {
   return useQuery({
     queryKey: ["users"],
-    queryFn: () => getList("/users/"),
+    queryFn: () => getList<UserAccount>("/users/"),
   });
 }
 
@@ -242,5 +356,56 @@ export function useCreateUser() {
   return useMutation({
     mutationFn: (body: unknown) => post("/users/", body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
+  });
+}
+
+export function useUpdateUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: number } & Record<string, unknown>) =>
+      patch(`/users/${id}/`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
+  });
+}
+
+// --- роли (группы) и каталог прав --------------------------------------------
+export function useGroups() {
+  return useQuery({
+    queryKey: ["groups"],
+    queryFn: () => getList<Group>("/groups/"),
+  });
+}
+
+export function usePermissionsCatalog() {
+  return useQuery({
+    queryKey: ["permissions-catalog"],
+    queryFn: async () =>
+      (await api.get<PermissionCatalogEntry[]>("/permissions/")).data,
+  });
+}
+
+export function useCreateGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; permission_ids?: number[] }) =>
+      post<Group>("/groups/", body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["groups"] }),
+  });
+}
+
+export function useUpdateGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: number } & Record<string, unknown>) =>
+      patch<Group>(`/groups/${id}/`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["groups"] }),
+  });
+}
+
+export function useDeleteGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => del(`/groups/${id}/`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["groups"] }),
   });
 }

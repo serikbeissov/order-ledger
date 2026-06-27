@@ -4,7 +4,9 @@
 from datetime import date
 from decimal import Decimal
 
+from django.contrib.auth.models import User
 from django.test import TestCase
+from rest_framework.test import APITestCase
 
 from apps.clients.models import Client
 from apps.orders.models import Order, OrderExpense, OrderItem, Return
@@ -13,7 +15,9 @@ from apps.orders.services import (
     is_order_completed,
     order_calculation,
     order_status,
+    sync_order_status,
 )
+from apps.warehouse.models import WarehouseItem
 
 
 def D(v):
@@ -122,3 +126,90 @@ class OrderStatusTests(TestCase):
         self.assertEqual(item.status, OrderItem.STATUS_ISSUED)
         self.assertTrue(is_order_completed(self.order))
         self.assertEqual(order_status(self.order)["label"], "Выдан")
+
+
+class StatusHistoryTests(TestCase):
+    def setUp(self):
+        self.c = Client.objects.create(full_name="К")
+        self.order = Order.objects.create(client=self.c)
+
+    def test_status_events_recorded_on_change(self):
+        item = OrderItem.objects.create(
+            order=self.order, name="Т", cost_kzt=D("100"), qty=4,
+            sale_price=D("200"), status=OrderItem.STATUS_RECEIVED,
+        )
+        sync_order_status(self.order)
+        self.assertEqual(self.order.status_events.count(), 1)
+        # повтор без изменений — новой записи нет
+        sync_order_status(self.order)
+        self.assertEqual(self.order.status_events.count(), 1)
+        # частичная выдача — новая запись (прогресс изменился)
+        apply_issue(item, 2)
+        item.save()
+        sync_order_status(self.order)
+        self.assertEqual(self.order.status_events.count(), 2)
+        last = self.order.status_events.first()
+        self.assertEqual(last.issued_qty, 2)
+        self.assertEqual(last.total_qty, 4)
+
+
+class WarehouseSellTests(APITestCase):
+    def setUp(self):
+        self.admin = User.objects.create_superuser("root", "r@e.com", "pass12345")
+        self.client.force_login(self.admin)
+        self.c = Client.objects.create(full_name="К")
+        self.order = Order.objects.create(client=self.c)
+        self.wi = WarehouseItem.objects.create(
+            name="Сумка", cost_kzt=D("60000"), qty=1, planned_price=D("100000"),
+            status=WarehouseItem.STATUS_IN_STOCK,
+        )
+
+    def test_selling_marks_warehouse_sold_and_links(self):
+        r = self.client.post(
+            f"/api/orders/{self.order.id}/items/",
+            {"name": "Сумка", "cost_kzt": "60000", "qty": 1, "sale_price": "100000",
+             "warehouse_item": self.wi.id},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 201)
+        self.wi.refresh_from_db()
+        self.assertEqual(self.wi.status, WarehouseItem.STATUS_SOLD)
+        item = self.order.items.first()
+        self.assertEqual(item.warehouse_item_id, self.wi.id)
+        # история статуса появилась
+        self.assertGreaterEqual(self.order.status_events.count(), 1)
+
+    def test_partial_warehouse_sale_decrements_qty(self):
+        wi = WarehouseItem.objects.create(
+            name="Кроссовки", cost_kzt=D("40000"), qty=3,
+            status=WarehouseItem.STATUS_IN_STOCK,
+        )
+        r = self.client.post(
+            f"/api/orders/{self.order.id}/items/",
+            {"name": "Кроссовки", "cost_kzt": "40000", "qty": 1, "sale_price": "75000",
+             "warehouse_item": wi.id},
+            format="json",
+        )
+        self.assertEqual(r.status_code, 201)
+        wi.refresh_from_db()
+        self.assertEqual(wi.qty, 2)  # продали 1 из 3
+        self.assertEqual(wi.status, WarehouseItem.STATUS_IN_STOCK)
+
+    def test_deleting_warehouse_item_restores_stock(self):
+        wi = WarehouseItem.objects.create(
+            name="Часы", cost_kzt=D("30000"), qty=2,
+            status=WarehouseItem.STATUS_IN_STOCK,
+        )
+        r = self.client.post(
+            f"/api/orders/{self.order.id}/items/",
+            {"name": "Часы", "cost_kzt": "30000", "qty": 2, "sale_price": "60000",
+             "warehouse_item": wi.id},
+            format="json",
+        )
+        iid = self.order.items.first().id
+        wi.refresh_from_db()
+        self.assertEqual(wi.status, WarehouseItem.STATUS_SOLD)
+        self.client.delete(f"/api/orders/{self.order.id}/items/{iid}/")
+        wi.refresh_from_db()
+        self.assertEqual(wi.status, WarehouseItem.STATUS_IN_STOCK)
+        self.assertEqual(wi.qty, 4)  # вернули 2

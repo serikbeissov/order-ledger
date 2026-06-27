@@ -4,7 +4,7 @@ from rest_framework import serializers
 
 from apps.common.money import money
 
-from .models import Order, OrderExpense, OrderItem, Return
+from .models import Order, OrderExpense, OrderItem, OrderStatusEvent, Return
 from .services import (
     item_delivery,
     item_returned_qty,
@@ -13,6 +13,12 @@ from .services import (
     order_calculation,
     order_status,
 )
+
+
+class OrderStatusEventSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OrderStatusEvent
+        fields = ["id", "code", "summary", "issued_qty", "total_qty", "created_at"]
 
 
 class ReturnSerializer(serializers.ModelSerializer):
@@ -123,6 +129,9 @@ class OrderDetailSerializer(serializers.ModelSerializer):
     expenses = OrderExpenseSerializer(many=True, read_only=True)
     calculation = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField()
+    status_history = OrderStatusEventSerializer(
+        source="status_events", many=True, read_only=True
+    )
     client_balance = serializers.SerializerMethodField()
     tax_hint = serializers.SerializerMethodField()
 
@@ -131,7 +140,7 @@ class OrderDetailSerializer(serializers.ModelSerializer):
         fields = [
             "id", "client", "client_name", "created_by", "notes", "is_archived",
             "created_at", "items", "expenses", "calculation", "status",
-            "client_balance", "tax_hint",
+            "status_history", "client_balance", "tax_hint",
         ]
         read_only_fields = ["created_at", "created_by"]
 

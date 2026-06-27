@@ -114,6 +114,15 @@ export interface OrderListItem {
   status: OrderStatus;
 }
 
+export interface OrderStatusEvent {
+  id: number;
+  code: string;
+  summary: string;
+  issued_qty: number;
+  total_qty: number;
+  created_at: string;
+}
+
 export interface OrderDetail {
   id: number;
   client: number;
@@ -126,6 +135,7 @@ export interface OrderDetail {
   expenses: OrderExpense[];
   calculation: OrderCalculation;
   status: OrderStatus;
+  status_history: OrderStatusEvent[];
   client_balance: Money;
   tax_hint: Money;
 }
@@ -161,9 +171,36 @@ export interface Expense {
   category: number;
   category_name: string;
   amount: Money;
+  method: "cash" | "card" | "terminal";
+  method_display: string;
   comment: string;
   expense_date: string;
+  period: string | null;
+  recurring: number | null;
+  recurring_name: string | null;
   is_recurring: boolean;
+}
+
+export interface RecurringExpense {
+  id: number;
+  name: string;
+  category: number;
+  category_name: string;
+  planned_amount: Money | null;
+  method: "cash" | "card" | "terminal";
+  method_display: string;
+  is_active: boolean;
+  notes: string;
+}
+
+/** Непогашенный за месяц пункт-напоминание (для баннера/списка). */
+export interface RecurringDueItem {
+  id: number;
+  name: string;
+  category: number;
+  category_name: string;
+  planned_amount: Money | null;
+  method: "cash" | "card" | "terminal";
 }
 
 export interface Investor {
@@ -228,4 +265,57 @@ export interface Dashboard {
   frozen_capital: Money;
   client_debts: Money;
   client_overpayments: Money;
+  debtors: { id: number; full_name: string; phone: string; debt: Money }[];
+  stale_orders: {
+    id: number;
+    client_name: string;
+    status: string;
+    created_at: string;
+    days: number;
+  }[];
+  birthdays: { id: number; full_name: string; birth_date: string; in_days: number }[];
+  tax: {
+    terminal_turnover: Money;
+    estimate: Money;
+    reserved: Money;
+    shortfall: Money;
+  };
+}
+
+// --- Пользователи, роли, права (управление доступом) ------------------------
+export interface UserAccount {
+  id: number;
+  username: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  is_active: boolean;
+  is_superuser: boolean;
+  role: "admin" | "manager" | "staff" | null;
+  groups: { id: number; name: string }[];
+  permissions: string[];
+  group_id_list: number[];
+  own_permission_ids: number[];
+}
+
+export interface Group {
+  id: number;
+  name: string;
+  permissions: string[]; // ["app.codename", …]
+  current_permission_ids: number[];
+  user_count: number;
+}
+
+export interface CatalogPermission {
+  id: number;
+  codename: string; // "app.codename"
+  action: "view" | "add" | "change" | "delete";
+  action_label: string;
+}
+
+export interface PermissionCatalogEntry {
+  app_label: string;
+  model: string;
+  model_label: string;
+  permissions: CatalogPermission[];
 }

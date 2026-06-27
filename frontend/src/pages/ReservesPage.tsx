@@ -10,10 +10,13 @@ import {
   Field,
   Input,
   Modal,
+  MoneyInput,
   Select,
   Spinner,
 } from "@/components/ui";
-import { formatMoney } from "@/lib/format";
+import { formatDate, formatMoney } from "@/lib/format";
+import { useAuth } from "@/api/auth";
+import { hasPerm } from "@/lib/permissions";
 
 const KIND_COLOR: Record<string, "blue" | "yellow" | "gray"> = {
   tax: "blue",
@@ -25,6 +28,8 @@ export default function ReservesPage() {
   const { data, isLoading } = useReserves();
   const [open, setOpen] = useState(false);
   const [moveReserve, setMoveReserve] = useState<Reserve | null>(null);
+  const { user } = useAuth();
+  const canManage = hasPerm(user, "finance.add_reserve");
 
   if (isLoading) return <Spinner />;
 
@@ -32,7 +37,7 @@ export default function ReservesPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Резервы (конверты)</h1>
-        <Button onClick={() => setOpen(true)}>+ Резерв</Button>
+        {canManage && <Button onClick={() => setOpen(true)}>+ Резерв</Button>}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -53,9 +58,22 @@ export default function ReservesPage() {
               {r.target_amount && (
                 <div className="text-xs text-gray-400">Цель: {formatMoney(r.target_amount)}</div>
               )}
-              <Button variant="secondary" className="w-full" onClick={() => setMoveReserve(r)}>
-                Отложить / снять
-              </Button>
+              {r.movements.length > 0 && (
+                <div className="space-y-1 border-t border-gray-100 pt-2">
+                  {r.movements.slice(0, 5).map((m) => (
+                    <div key={m.id} className="text-xs text-gray-500">
+                      <span className="text-gray-400">{formatDate(m.moved_at)}</span>{" "}
+                      {m.direction_display} {formatMoney(m.amount)}
+                      {m.comment && <span className="text-gray-400"> — {m.comment}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {canManage && (
+                <Button variant="secondary" className="w-full" onClick={() => setMoveReserve(r)}>
+                  Отложить / снять
+                </Button>
+              )}
             </CardBody>
           </Card>
         ))}
@@ -85,10 +103,9 @@ function CreateModal({ open, onClose }: { open: boolean; onClose: () => void }) 
           </Select>
         </Field>
         <Field label="Цель (опц.)">
-          <Input
-            type="number"
+          <MoneyInput
             value={f.target_amount}
-            onChange={(e) => setF({ ...f, target_amount: e.target.value })}
+            onChange={(v) => setF({ ...f, target_amount: v })}
           />
         </Field>
         <Button
@@ -129,7 +146,7 @@ function MoveModal({ reserve, onClose }: { reserve: Reserve | null; onClose: () 
           </Select>
         </Field>
         <Field label="Сумма (₸)">
-          <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <MoneyInput value={amount} onChange={setAmount} />
         </Field>
         <Field label="Дата">
           <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />

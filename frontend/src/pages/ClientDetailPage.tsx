@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { useAddMovement, useClient, useOrders } from "@/api/hooks";
+import { useAddMovement, useClient, useOrders, useUpdateClient } from "@/api/hooks";
+import NotesCard from "@/components/NotesCard";
+import { statusColor } from "@/lib/status";
 import {
   Badge,
   Button,
@@ -10,6 +12,7 @@ import {
   Field,
   Input,
   Modal,
+  MoneyInput,
   Select,
   Spinner,
   Table,
@@ -17,6 +20,8 @@ import {
   Th,
 } from "@/components/ui";
 import { balanceColor, formatDate, formatMoney } from "@/lib/format";
+import { useAuth } from "@/api/auth";
+import { hasPerm } from "@/lib/permissions";
 
 export default function ClientDetailPage() {
   const { id } = useParams();
@@ -24,6 +29,10 @@ export default function ClientDetailPage() {
   const { data: client, isLoading } = useClient(clientId);
   const { data: orders } = useOrders({ client: clientId });
   const [modal, setModal] = useState<null | "deposit" | "refund">(null);
+  const { user } = useAuth();
+  const canPay = hasPerm(user, "clients.add_client");
+  const canEdit = hasPerm(user, "clients.change_client");
+  const updateClient = useUpdateClient();
 
   if (isLoading || !client) return <Spinner />;
 
@@ -36,14 +45,16 @@ export default function ClientDetailPage() {
           <h1 className="text-2xl font-bold">{client.full_name}</h1>
           <div className="text-sm text-gray-500">{client.phone || "телефон не указан"}</div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={() => setModal("deposit")}>
-            Пополнить
-          </Button>
-          <Button variant="secondary" onClick={() => setModal("refund")}>
-            Вернуть деньги
-          </Button>
-        </div>
+        {canPay && (
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => setModal("deposit")}>
+              Пополнить
+            </Button>
+            <Button variant="secondary" onClick={() => setModal("refund")}>
+              Вернуть деньги
+            </Button>
+          </div>
+        )}
       </div>
 
       {birthdaySoon && <Badge color="yellow">🎂 Скоро день рождения: {formatDate(client.birth_date)}</Badge>}
@@ -54,6 +65,13 @@ export default function ClientDetailPage() {
         <Stat label="Возвращено" value={formatMoney(client.refunds)} />
         <Stat label="К оплате" value={formatMoney(client.due)} />
       </div>
+
+      <NotesCard
+        title="Заметка о клиенте"
+        value={client.notes}
+        canEdit={canEdit}
+        onSave={(notes) => updateClient.mutateAsync({ id: clientId, notes })}
+      />
 
       <Card>
         <CardHeader title="Заказы" />
@@ -75,7 +93,7 @@ export default function ClientDetailPage() {
                     </Link>
                   </Td>
                   <Td>
-                    <Badge color={o.status.completed ? "green" : "gray"}>{o.status.label}</Badge>
+                    <Badge color={statusColor(o.status.code)}>{o.status.label}</Badge>
                   </Td>
                   <Td className="text-right">{formatMoney(o.profit)}</Td>
                 </tr>
@@ -178,7 +196,7 @@ function MovementModal({
     >
       <div className="space-y-3">
         <Field label="Сумма (₸)">
-          <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <MoneyInput value={amount} onChange={setAmount} />
         </Field>
         <Field label="Способ">
           <Select value={method} onChange={(e) => setMethod(e.target.value)}>

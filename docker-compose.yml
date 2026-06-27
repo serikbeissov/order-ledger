@@ -58,6 +58,31 @@ services:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
       - frontend_dist:/usr/share/nginx/html:ro
 
+  # Ночной бэкап БД: pg_dump раз в сутки, хранит последние 14 копий (§12).
+  db-backup:
+    image: postgres:16
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-orderledger}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-orderledger}
+      PGDATABASE: ${POSTGRES_DB:-orderledger}
+    volumes:
+      - ./backups:/backups
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "Сервис бэкапа БД запущен (раз в сутки в /backups).";
+        while true; do
+          TS=$$(date +%Y%m%d_%H%M%S);
+          pg_dump -Fc -f /backups/orderledger_$$TS.dump && echo "Бэкап: orderledger_$$TS.dump" || echo "Ошибка бэкапа";
+          ls -1t /backups/*.dump 2>/dev/null | tail -n +15 | xargs -r rm -f;
+          sleep 86400;
+        done
+
 volumes:
   pgdata:
   frontend_dist:

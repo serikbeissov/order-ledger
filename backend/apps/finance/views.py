@@ -2,7 +2,8 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from apps.accounts.permissions import IsManagerOrAdmin
+from apps.accounts.permissions import ConfigurableModelPermissions
+from apps.common.mixins import NoDeleteMixin
 
 from .models import Investment, Investor, Reserve
 from .serializers import (
@@ -11,7 +12,7 @@ from .serializers import (
     ReserveMovementSerializer,
     ReserveSerializer,
 )
-from .services import investments_pool
+from .services import investments_pool, reserve_balance
 
 
 class InvestorViewSet(viewsets.ModelViewSet):
@@ -19,16 +20,16 @@ class InvestorViewSet(viewsets.ModelViewSet):
 
     queryset = Investor.objects.all()
     serializer_class = InvestorSerializer
-    permission_classes = [IsManagerOrAdmin]
+    permission_classes = [ConfigurableModelPermissions]
     search_fields = ["name"]
 
 
-class InvestmentViewSet(viewsets.ModelViewSet):
-    """Вложения/возвраты инвесторов + текущий пул (§4.7)."""
+class InvestmentViewSet(NoDeleteMixin, viewsets.ModelViewSet):
+    """Вложения/возвраты инвесторов + текущий пул (§4.7). Удаление запрещено (§8)."""
 
     queryset = Investment.objects.select_related("investor").all()
     serializer_class = InvestmentSerializer
-    permission_classes = [IsManagerOrAdmin]
+    permission_classes = [ConfigurableModelPermissions]
     ordering_fields = ["moved_at", "amount"]
 
     def list(self, request, *args, **kwargs):
@@ -43,7 +44,7 @@ class ReserveViewSet(viewsets.ModelViewSet):
 
     queryset = Reserve.objects.all()
     serializer_class = ReserveSerializer
-    permission_classes = [IsManagerOrAdmin]
+    permission_classes = [ConfigurableModelPermissions]
 
     @action(detail=True, methods=["post"])
     def movements(self, request, pk=None):
@@ -51,5 +52,12 @@ class ReserveViewSet(viewsets.ModelViewSet):
         reserve = self.get_object()
         serializer = ReserveMovementSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        # нельзя снять больше, чем отложено в резерве
+        if serializer.validated_data["direction"] == "release":
+            if serializer.validated_data["amount"] > reserve_balance(reserve):
+                return Response(
+                    {"detail": "Нельзя снять больше, чем отложено в резерве."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         serializer.save(reserve=reserve)
         return Response(serializer.data, status=status.HTTP_201_CREATED)

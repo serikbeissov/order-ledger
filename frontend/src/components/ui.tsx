@@ -1,5 +1,7 @@
 // Лёгкий набор UI-компонентов в стиле shadcn/ui на Tailwind.
 import { clsx } from "clsx";
+import { useRef } from "react";
+import { groupDigits, parseMoneyInput } from "@/lib/format";
 import {
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
@@ -58,31 +60,46 @@ export function Button({ variant = "primary", className, ...props }: ButtonProps
   );
 }
 
-export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
+// Базовые стили полей ввода (рамка, отступы, фокус) — общие для Input/Select/Textarea.
+const CONTROL_BASE =
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-accent focus:ring-1 focus:ring-brand-accent";
+
+export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
+  return <input className={clsx(CONTROL_BASE, className)} {...props} />;
+}
+
+/**
+ * Денежный ввод с разделением по тысячам (CLAUDE.md §10).
+ * Показывает «100 000», наружу отдаёт сырое число строкой ("100000").
+ */
+export function MoneyInput({
+  value,
+  onChange,
+  placeholder,
+  className,
+}: {
+  value: string;
+  onChange: (raw: string) => void;
+  placeholder?: string;
+  className?: string;
+}) {
   return (
     <input
-      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-accent focus:ring-1 focus:ring-brand-accent"
-      {...props}
+      inputMode="decimal"
+      value={groupDigits(value)}
+      placeholder={placeholder}
+      onChange={(e) => onChange(parseMoneyInput(e.target.value))}
+      className={clsx(CONTROL_BASE, className)}
     />
   );
 }
 
-export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return (
-    <textarea
-      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-brand-accent focus:ring-1 focus:ring-brand-accent"
-      {...props}
-    />
-  );
+export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea className={clsx(CONTROL_BASE, className)} {...props} />;
 }
 
-export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
-  return (
-    <select
-      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-brand-accent focus:ring-1 focus:ring-brand-accent"
-      {...props}
-    />
-  );
+export function Select({ className, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
+  return <select className={clsx(CONTROL_BASE, "bg-white", className)} {...props} />;
 }
 
 export function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -94,17 +111,26 @@ export function Field({ label, children }: { label: string; children: ReactNode 
   );
 }
 
+export type BadgeColor =
+  | "gray"
+  | "green"
+  | "yellow"
+  | "orange"
+  | "blue"
+  | "red";
+
 export function Badge({
   children,
   color = "gray",
 }: {
   children: ReactNode;
-  color?: "gray" | "green" | "yellow" | "blue" | "red";
+  color?: BadgeColor;
 }) {
   const styles = {
     gray: "bg-gray-100 text-gray-700",
     green: "bg-green-100 text-green-700",
     yellow: "bg-yellow-100 text-yellow-700",
+    orange: "bg-orange-100 text-orange-700",
     blue: "bg-blue-100 text-blue-700",
     red: "bg-red-100 text-red-700",
   }[color];
@@ -126,16 +152,22 @@ export function Modal({
   title: string;
   children: ReactNode;
 }) {
+  const downOnBackdrop = useRef(false);
   if (!open) return null;
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onClick={onClose}
+      // Закрываем только если и нажатие, и отпускание были на фоне.
+      // Иначе выделение текста с «выносом» курсора на фон закрывало бы окно.
+      onMouseDown={(e) => {
+        downOnBackdrop.current = e.target === e.currentTarget;
+      }}
+      onMouseUp={(e) => {
+        if (downOnBackdrop.current && e.target === e.currentTarget) onClose();
+        downOnBackdrop.current = false;
+      }}
     >
-      <div
-        className="w-full max-w-lg rounded-xl bg-white shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="w-full max-w-lg rounded-xl bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
           <h3 className="font-semibold">{title}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700">
@@ -160,7 +192,7 @@ export function Table({ children }: { children: ReactNode }) {
   );
 }
 
-export function Th({ children, className }: { children: ReactNode; className?: string }) {
+export function Th({ children, className }: { children?: ReactNode; className?: string }) {
   return (
     <th className={clsx("border-b border-gray-200 px-3 py-2 text-left font-medium text-gray-500", className)}>
       {children}
@@ -168,6 +200,6 @@ export function Th({ children, className }: { children: ReactNode; className?: s
   );
 }
 
-export function Td({ children, className }: { children: ReactNode; className?: string }) {
+export function Td({ children, className }: { children?: ReactNode; className?: string }) {
   return <td className={clsx("border-b border-gray-100 px-3 py-2", className)}>{children}</td>;
 }

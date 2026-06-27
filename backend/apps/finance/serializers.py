@@ -22,6 +22,16 @@ class InvestmentSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Сумма не может быть отрицательной.")
         return value
 
+    def validate(self, attrs):
+        from .services import investments_pool
+
+        if attrs.get("direction") == Investment.DIRECTION_RETURN:
+            if attrs["amount"] > investments_pool():
+                raise serializers.ValidationError(
+                    {"amount": "Возврат превышает текущий пул инвестиций."}
+                )
+        return attrs
+
 
 class InvestorSerializer(serializers.ModelSerializer):
     investments = InvestmentSerializer(many=True, read_only=True)

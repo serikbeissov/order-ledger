@@ -15,18 +15,31 @@ import {
   Th,
 } from "@/components/ui";
 import { formatDate, formatMoney } from "@/lib/format";
+import { statusColor } from "@/lib/status";
+import { useAuth } from "@/api/auth";
+import { hasPerm } from "@/lib/permissions";
 
 export default function OrdersPage() {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const { data, isLoading } = useOrders({ search });
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const canCreate = hasPerm(user, "orders.add_order");
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Заказы</h1>
-        <Button onClick={() => setOpen(true)}>+ Заказ</Button>
+        <div className="flex gap-2">
+          <a
+            href="/api/orders/export/"
+            className="inline-flex items-center rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-200"
+          >
+            Экспорт CSV
+          </a>
+          {canCreate && <Button onClick={() => setOpen(true)}>+ Заказ</Button>}
+        </div>
       </div>
       <Input
         placeholder="Поиск по клиенту…"
@@ -59,7 +72,7 @@ export default function OrdersPage() {
                   <Td>{o.client_name}</Td>
                   <Td>{formatDate(o.created_at)}</Td>
                   <Td>
-                    <Badge color={o.status.completed ? "green" : "gray"}>{o.status.label}</Badge>
+                    <Badge color={statusColor(o.status.code)}>{o.status.label}</Badge>
                   </Td>
                   <Td className="text-right font-medium">{formatMoney(o.profit)}</Td>
                 </tr>

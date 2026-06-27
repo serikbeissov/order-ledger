@@ -1,7 +1,13 @@
 import { useState } from "react";
 import { useParams } from "react-router-dom";
-import { useOrder, useOrderAction } from "@/api/hooks";
-import type { OrderItem } from "@/api/types";
+import {
+  useAddMovement,
+  useOrder,
+  useOrderAction,
+  useUpdateOrder,
+  useWarehouse,
+} from "@/api/hooks";
+import type { OrderDetail, OrderItem, WarehouseItem } from "@/api/types";
 import {
   Badge,
   Button,
@@ -11,23 +17,39 @@ import {
   Field,
   Input,
   Modal,
+  MoneyInput,
   Select,
   Spinner,
   Table,
   Td,
   Th,
 } from "@/components/ui";
-import { balanceColor, formatMoney } from "@/lib/format";
+import { balanceColor, formatDate, formatMoney } from "@/lib/format";
+import { useAuth } from "@/api/auth";
+import { hasPerm } from "@/lib/permissions";
+import NotesCard from "@/components/NotesCard";
+import { statusBorderClass, statusColor } from "@/lib/status";
+
+const ITEM_STATUSES = [
+  { value: "ordered", label: "Заказан" },
+  { value: "in_transit", label: "В пути" },
+  { value: "received", label: "Получен" },
+  { value: "issued", label: "Выдан" },
+];
 
 export default function OrderDetailPage() {
   const { id } = useParams();
   const orderId = Number(id);
   const { data: order, isLoading } = useOrder(orderId);
   const actions = useOrderAction(orderId);
+  const updateOrder = useUpdateOrder();
+  const addMovement = useAddMovement(order?.client ?? 0);
   const [addItem, setAddItem] = useState(false);
   const [addExpense, setAddExpense] = useState(false);
   const [issueItem, setIssueItem] = useState<OrderItem | null>(null);
   const [returnItem, setReturnItem] = useState<OrderItem | null>(null);
+  const { user } = useAuth();
+  const canEdit = hasPerm(user, "orders.add_order");
 
   if (isLoading || !order) return <Spinner />;
   const c = order.calculation;
@@ -39,7 +61,7 @@ export default function OrderDetailPage() {
           <h1 className="text-2xl font-bold">Заказ №{order.id}</h1>
           <div className="text-sm text-gray-500">{order.client_name}</div>
         </div>
-        <Badge color={order.status.completed ? "green" : "gray"}>{order.status.label}</Badge>
+        <Badge color={statusColor(order.status.code)}>{order.status.label}</Badge>
       </div>
 
       {/* Блок расчёта (§4.1, §5) */}
@@ -60,11 +82,24 @@ export default function OrderDetailPage() {
         </CardBody>
       </Card>
 
+      {/* Заметка к заказу (видимая и редактируемая) */}
+      <NotesCard
+        title="Заметка к заказу"
+        value={order.notes}
+        canEdit={canEdit}
+        onSave={(notes) => updateOrder.mutateAsync({ id: orderId, notes })}
+      />
+
+      {/* История статуса (§4.4) */}
+      <StatusHistory order={order} />
+
       {/* Позиции */}
       <Card>
         <CardHeader
           title="Позиции"
-          action={<Button onClick={() => setAddItem(true)}>+ Позиция</Button>}
+          action={
+            canEdit ? <Button onClick={() => setAddItem(true)}>+ Позиция</Button> : null
+          }
         />
         <CardBody>
           <Table>
@@ -84,12 +119,20 @@ export default function OrderDetailPage() {
                 <tr key={it.id}>
                   <Td>
                     {it.name}
+                    {it.warehouse_item && (
+                      <Badge color="blue">со склада</Badge>
+                    )}
                     {it.track_number && (
                       <span className="ml-1 text-xs text-gray-400">({it.track_number})</span>
                     )}
                     {it.returned_qty > 0 && (
                       <Badge color="yellow">возврат {it.returned_qty}</Badge>
                     )}
+                    {it.returns.filter((r) => r.comment).map((r) => (
+                      <div key={r.id} className="text-xs text-gray-400">
+                        ↩ {r.disposition_display}: {r.comment}
+                      </div>
+                    ))}
                   </Td>
                   <Td>{it.qty}</Td>
                   <Td>
@@ -98,19 +141,47 @@ export default function OrderDetailPage() {
                   <Td>{formatMoney(it.cost_kzt)}</Td>
                   <Td>{formatMoney(it.sale_price)}</Td>
                   <Td>
-                    <Badge color={it.status === "issued" ? "green" : "blue"}>
-                      {it.status_display}
-                    </Badge>
+                    {canEdit && it.status !== "issued" ? (
+                      <Select
+                        value={it.status}
+                        onChange={(e) => {
+                          const status = e.target.value;
+                          const body: Record<string, unknown> = { iid: it.id, status };
+                          // «Выдан» => считаем все единицы выданными, позиция закрывается
+                          if (status === "issued") body.issued_qty = it.qty;
+                          actions.updateItem.mutate(body as { iid: number });
+                        }}
+                        className={`min-w-36 border-2 font-medium ${statusBorderClass(it.status)}`}
+                      >
+                        {ITEM_STATUSES.map((s) => (
+                          <option key={s.value} value={s.value}>
+                            {s.label}
+                          </option>
+                        ))}
+                      </Select>
+                    ) : (
+                      <Badge color={statusColor(it.status)}>
+                        {it.status === "issued"
+                          ? "Выдан · закрыта"
+                          : it.status_display}
+                      </Badge>
+                    )}
                   </Td>
                   <Td>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" onClick={() => setIssueItem(it)}>
-                        Выдать
-                      </Button>
-                      <Button variant="ghost" onClick={() => setReturnItem(it)}>
-                        Возврат
-                      </Button>
-                    </div>
+                    {canEdit ? (
+                      <div className="flex gap-1">
+                        {it.status !== "issued" && (
+                          <Button variant="ghost" onClick={() => setIssueItem(it)}>
+                            Выдать
+                          </Button>
+                        )}
+                        <Button variant="ghost" onClick={() => setReturnItem(it)}>
+                          Возврат
+                        </Button>
+                      </div>
+                    ) : (
+                      <span className="text-gray-300">—</span>
+                    )}
                   </Td>
                 </tr>
               ))}
@@ -128,7 +199,9 @@ export default function OrderDetailPage() {
       <Card>
         <CardHeader
           title="Доп. расходы"
-          action={<Button onClick={() => setAddExpense(true)}>+ Расход</Button>}
+          action={
+            canEdit ? <Button onClick={() => setAddExpense(true)}>+ Расход</Button> : null
+          }
         />
         <CardBody>
           <Table>
@@ -182,11 +255,21 @@ export default function OrderDetailPage() {
       <ReturnModal
         item={returnItem}
         onClose={() => setReturnItem(null)}
-        onSubmit={(body) =>
-          actions.addReturn
-            .mutateAsync({ iid: returnItem!.id, ...body })
-            .then(() => setReturnItem(null))
-        }
+        onSubmit={async (body) => {
+          const { also_refund, refund_method, ...ret } = body as Record<string, unknown>;
+          await actions.addReturn.mutateAsync({ iid: returnItem!.id, ...ret });
+          // опционально сразу вернуть деньги клиенту движением refund (§4.2)
+          if (also_refund) {
+            await addMovement.mutateAsync({
+              direction: "refund",
+              amount: ret.refund_amount,
+              method: refund_method || "cash",
+              paid_at: ret.return_date,
+              comment: `возврат за «${returnItem!.name}»`,
+            });
+          }
+          setReturnItem(null);
+        }}
       />
     </div>
   );
@@ -198,6 +281,38 @@ function Stat({ label, value, highlight }: { label: string; value: string; highl
       <CardBody>
         <div className="text-xs uppercase tracking-wide text-gray-400">{label}</div>
         <div className={`mt-1 font-semibold ${highlight ? "text-brand-accent" : ""}`}>{value}</div>
+      </CardBody>
+    </Card>
+  );
+}
+
+function StatusHistory({ order }: { order: OrderDetail }) {
+  const events = order.status_history;
+  return (
+    <Card>
+      <CardHeader title="История статуса" />
+      <CardBody>
+        {events.length === 0 ? (
+          <p className="text-sm text-gray-400">Пока нет изменений статуса</p>
+        ) : (
+          <ol className="space-y-2">
+            {events.map((e) => (
+              <li key={e.id} className="flex items-start gap-3">
+                <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-brand-accent" />
+                <div>
+                  <div className="text-sm font-medium text-gray-800">{e.summary}</div>
+                  <div className="text-xs text-gray-400">
+                    {formatDate(e.created_at)}{" "}
+                    {new Date(e.created_at).toLocaleTimeString("ru-RU", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
       </CardBody>
     </Card>
   );
@@ -227,21 +342,57 @@ function AddItemModal({
     purchase_date: "",
     delivery_date: "",
   });
+  const [warehouseId, setWarehouseId] = useState<number | "">("");
+  const { data: warehouse } = useWarehouse();
+  const available: WarehouseItem[] = (warehouse?.results ?? []).filter(
+    (w) => w.status !== "sold",
+  );
   const set = (k: string, v: string) => setF({ ...f, [k]: v });
+
+  /** Префилл полей при выборе товара со склада (продажа со склада). */
+  function pickWarehouse(idStr: string) {
+    setWarehouseId(idStr ? Number(idStr) : "");
+    const w = available.find((x) => String(x.id) === idStr);
+    if (w) {
+      setF((prev) => ({
+        ...prev,
+        name: w.name,
+        cost_kzt: w.cost_kzt,
+        cost_foreign: w.cost_foreign ?? "",
+        currency: w.currency,
+        country: w.country,
+        qty: String(w.qty),
+        sale_price: w.planned_price && w.planned_price !== "0.00" ? w.planned_price : prev.sale_price,
+        status: "received",
+      }));
+    }
+  }
 
   return (
     <Modal open={open} onClose={onClose} title="Новая позиция">
       <div className="grid grid-cols-2 gap-3">
+        <div className="col-span-2">
+          <Field label="Продать со склада (опционально)">
+            <Select value={warehouseId} onChange={(e) => pickWarehouse(e.target.value)}>
+              <option value="">— новая позиция (не со склада) —</option>
+              {available.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name} · {w.qty} шт · себес {w.cost_kzt} ₸ ({w.status_display})
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
         <div className="col-span-2">
           <Field label="Наименование">
             <Input value={f.name} onChange={(e) => set("name", e.target.value)} />
           </Field>
         </div>
         <Field label="Себестоимость (₸)">
-          <Input type="number" value={f.cost_kzt} onChange={(e) => set("cost_kzt", e.target.value)} />
+          <MoneyInput value={f.cost_kzt} onChange={(v) => set("cost_kzt", v)} />
         </Field>
         <Field label="Себес (валюта)">
-          <Input type="number" value={f.cost_foreign} onChange={(e) => set("cost_foreign", e.target.value)} />
+          <MoneyInput value={f.cost_foreign} onChange={(v) => set("cost_foreign", v)} />
         </Field>
         <Field label="Валюта">
           <Input value={f.currency} onChange={(e) => set("currency", e.target.value)} placeholder="USD" />
@@ -250,10 +401,10 @@ function AddItemModal({
           <Input type="number" value={f.qty} onChange={(e) => set("qty", e.target.value)} />
         </Field>
         <Field label="Цена продажи (за ед.)">
-          <Input type="number" value={f.sale_price} onChange={(e) => set("sale_price", e.target.value)} />
+          <MoneyInput value={f.sale_price} onChange={(v) => set("sale_price", v)} />
         </Field>
         <Field label="Доставка (за ед.)">
-          <Input type="number" value={f.delivery_price} onChange={(e) => set("delivery_price", e.target.value)} />
+          <MoneyInput value={f.delivery_price} onChange={(v) => set("delivery_price", v)} />
         </Field>
         <Field label="Страна">
           <Input value={f.country} onChange={(e) => set("country", e.target.value)} />
@@ -289,6 +440,7 @@ function AddItemModal({
             cost_foreign: f.cost_foreign || null,
             purchase_date: f.purchase_date || null,
             delivery_date: f.delivery_date || null,
+            warehouse_item: warehouseId || null,
           })
         }
       >
@@ -333,7 +485,7 @@ function AddExpenseModal({
           </div>
         )}
         <Field label="Сумма (₸)">
-          <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <MoneyInput value={amount} onChange={setAmount} />
         </Field>
         <Field label="Комментарий">
           <Input value={comment} onChange={(e) => setComment(e.target.value)} />
@@ -403,8 +555,12 @@ function ReturnModal({
   const [refund, setRefund] = useState("");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [comment, setComment] = useState("");
+  const [alsoRefund, setAlsoRefund] = useState(false);
+  const [refundMethod, setRefundMethod] = useState("cash");
   if (!item) return null;
   const maxQty = item.qty - item.returned_qty;
+  // эффективная сумма возврата клиенту: введённая или цена × кол-во
+  const effectiveRefund = refund || String(Number(item.sale_price) * Number(qty || 0));
 
   return (
     <Modal open onClose={onClose} title={`Возврат: ${item.name}`}>
@@ -423,7 +579,7 @@ function ReturnModal({
           </Select>
         </Field>
         <Field label="Сумма возврата клиенту (пусто = цена × кол-во)">
-          <Input type="number" value={refund} onChange={(e) => setRefund(e.target.value)} />
+          <MoneyInput value={refund} onChange={setRefund} />
         </Field>
         <Field label="Дата возврата">
           <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
@@ -431,6 +587,23 @@ function ReturnModal({
         <Field label="Комментарий">
           <Input value={comment} onChange={(e) => setComment(e.target.value)} />
         </Field>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={alsoRefund}
+            onChange={(e) => setAlsoRefund(e.target.checked)}
+          />
+          Сразу вернуть деньги клиенту ({formatMoney(effectiveRefund)})
+        </label>
+        {alsoRefund && (
+          <Field label="Способ возврата">
+            <Select value={refundMethod} onChange={(e) => setRefundMethod(e.target.value)}>
+              <option value="cash">Наличные</option>
+              <option value="card">Карта</option>
+              <option value="terminal">Терминал</option>
+            </Select>
+          </Field>
+        )}
         <Button
           className="w-full"
           disabled={!qty || Number(qty) < 1 || Number(qty) > maxQty}
@@ -438,9 +611,11 @@ function ReturnModal({
             onSubmit({
               qty: Number(qty),
               disposition,
-              refund_amount: refund || undefined,
+              refund_amount: alsoRefund ? effectiveRefund : refund || undefined,
               return_date: date,
               comment,
+              also_refund: alsoRefund,
+              refund_method: refundMethod,
             })
           }
         >

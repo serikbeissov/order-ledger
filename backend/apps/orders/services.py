@@ -90,6 +90,21 @@ def is_order_completed(order: Order) -> bool:
     return all(i.issued_qty >= i.qty for i in items)
 
 
+def order_completed_at(order: Order):
+    """
+    Дата завершения заказа = когда он стал полностью выданным (§4.6).
+
+    Берём время последнего события истории статуса с кодом issued; если истории
+    нет (старые данные) — дату создания заказа. None — если не завершён.
+    """
+    if not is_order_completed(order):
+        return None
+    ev = order.status_events.filter(code=OrderItem.STATUS_ISSUED).order_by(
+        "-created_at"
+    ).first()
+    return ev.created_at if ev else order.created_at
+
+
 def order_status(order: Order) -> dict:
     """
     Вычисляемый общий статус заказа (§4.4):
@@ -121,6 +136,35 @@ def order_status(order: Order) -> dict:
         "total_qty": total_qty,
         "completed": False,
     }
+
+
+def sync_order_status(order: Order) -> None:
+    """
+    Зафиксировать изменение статуса заказа в истории (§4.4).
+
+    Сравнивает текущий вычисленный статус с последней записью и добавляет новую
+    запись, если изменился этап (code) или прогресс выдачи (issued_qty). Шум от
+    простого добавления позиций (рост total_qty) не логируется.
+    """
+    from .models import OrderStatusEvent
+
+    st = order_status(order)
+    if st["code"] == "empty":
+        return
+    last = order.status_events.first()  # ordering: -created_at
+    if (
+        last is not None
+        and last.code == st["code"]
+        and last.issued_qty == st["issued_qty"]
+    ):
+        return
+    OrderStatusEvent.objects.create(
+        order=order,
+        code=st["code"],
+        summary=st["label"],
+        issued_qty=st["issued_qty"],
+        total_qty=st["total_qty"],
+    )
 
 
 def apply_issue(item: OrderItem, issued_qty: int) -> OrderItem:

@@ -1,9 +1,9 @@
 from django.db import models
 
-from apps.common.models import MoneyField, TimeStampedModel
+from apps.common.models import ArchivableModel, MoneyField, TimeStampedModel
 
 
-class WarehouseItem(TimeStampedModel):
+class WarehouseItem(ArchivableModel, TimeStampedModel):
     """
     Карточка складского товара (CLAUDE.md §3.2, §4.5).
 

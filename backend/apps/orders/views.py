@@ -3,7 +3,8 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from apps.accounts.permissions import IsStaffNoDelete
+from apps.accounts.permissions import ConfigurableModelPermissions
+from apps.common.export import csv_response
 from apps.warehouse.models import WarehouseItem
 
 from .models import Order, OrderItem, Return
@@ -14,14 +15,20 @@ from .serializers import (
     OrderListSerializer,
     ReturnSerializer,
 )
-from .services import apply_issue, item_returned_qty
+from .services import (
+    apply_issue,
+    item_returned_qty,
+    order_calculation,
+    order_status,
+    sync_order_status,
+)
 
 
 class OrderViewSet(viewsets.ModelViewSet):
     """Заказы (CLAUDE.md §7): позиции, выдача, возвраты, доп. расходы."""
 
     queryset = Order.objects.all().select_related("client")
-    permission_classes = [IsStaffNoDelete]
+    permission_classes = [ConfigurableModelPermissions]
     search_fields = ["client__full_name", "notes"]
     ordering_fields = ["created_at", "id"]
 
@@ -40,9 +47,53 @@ class OrderViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
 
+    @staticmethod
+    def _sell_warehouse_item(item: OrderItem):
+        """
+        Продажа со склада (§3.2, §4.5) с учётом количества:
+        - продали >= остатка → весь лот помечается sold;
+        - продали часть → уменьшаем остаток, лот остаётся in_stock.
+        """
+        wi = item.warehouse_item
+        if not wi:
+            return
+        if item.qty >= wi.qty:
+            wi.status = WarehouseItem.STATUS_SOLD
+            wi.save(update_fields=["status"])
+        else:
+            wi.qty -= item.qty
+            wi.save(update_fields=["qty"])
+
+    @staticmethod
+    def _return_to_warehouse(item: OrderItem):
+        """Вернуть проданные со склада единицы при удалении позиции (§4.5)."""
+        wi = item.warehouse_item
+        if not wi:
+            return
+        wi.qty += item.qty
+        wi.status = WarehouseItem.STATUS_IN_STOCK
+        wi.save(update_fields=["qty", "status"])
+
     def perform_destroy(self, instance):
         instance.is_archived = True
         instance.save(update_fields=["is_archived"])
+
+    @action(detail=False, methods=["get"])
+    def export(self, request):
+        """CSV-экспорт заказов (статус, выручка, прибыль)."""
+        rows = []
+        for o in self.filter_queryset(self.get_queryset()):
+            calc = order_calculation(o)
+            rows.append([
+                o.id, o.client.full_name, order_status(o)["label"],
+                calc["revenue"], calc["cost"], calc["profit"],
+                o.created_at.date().isoformat(),
+            ])
+        return csv_response(
+            "orders.csv",
+            ["№", "Клиент", "Статус", "Выручка", "Себестоимость", "Прибыль", "Создан"],
+            rows,
+        )
 
     # --- позиции -------------------------------------------------------------
     @action(detail=True, methods=["post"])
@@ -51,7 +102,9 @@ class OrderViewSet(viewsets.ModelViewSet):
         order = self.get_object()
         serializer = OrderItemSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(order=order)
+        item = serializer.save(order=order)
+        self._sell_warehouse_item(item)
+        sync_order_status(order)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @action(
@@ -63,11 +116,15 @@ class OrderViewSet(viewsets.ModelViewSet):
         order = self.get_object()
         item = get_object_or_404(OrderItem, pk=iid, order=order)
         if request.method == "DELETE":
+            # вернуть проданный со склада товар обратно перед удалением
+            self._return_to_warehouse(item)
             item.delete()
+            sync_order_status(order)
             return Response(status=status.HTTP_204_NO_CONTENT)
         serializer = OrderItemSerializer(item, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        item = serializer.save()
+        sync_order_status(order)
         return Response(serializer.data)
 
     @action(
@@ -92,6 +149,7 @@ class OrderViewSet(viewsets.ModelViewSet):
             )
         apply_issue(item, issued_qty)
         item.save(update_fields=["issued_qty", "status"])
+        sync_order_status(order)
         return Response(OrderItemSerializer(item).data)
 
     @action(
@@ -124,13 +182,24 @@ class OrderViewSet(viewsets.ModelViewSet):
         if ret.disposition == Return.DISPOSITION_RESTOCKED:
             self._restock(item, qty)
 
+        sync_order_status(order)
         return Response(ReturnSerializer(ret).data, status=status.HTTP_201_CREATED)
 
     @staticmethod
     def _restock(item: OrderItem, qty: int):
-        """Вернуть товар (и капитал) на склад (§4.5)."""
-        if item.warehouse_item:
-            wi = item.warehouse_item
+        """
+        Вернуть товар (и капитал) на склад (§4.5). Если есть привязка — пополняем
+        её; иначе ищем существующую карточку того же товара (дедуп), и только
+        если не нашли — создаём новую.
+        """
+        wi = item.warehouse_item
+        if not wi:
+            wi = WarehouseItem.objects.filter(
+                is_archived=False,
+                name__iexact=item.name,
+                cost_kzt=item.cost_kzt,
+            ).exclude(status=WarehouseItem.STATUS_SOLD).first()
+        if wi:
             wi.qty += qty
             wi.status = WarehouseItem.STATUS_IN_STOCK
             wi.save(update_fields=["qty", "status"])

@@ -2,7 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./api/auth";
 import Layout from "./components/Layout";
 import { Spinner } from "./components/ui";
-import { canSeeFinance, isAdmin } from "./lib/permissions";
+import { canManageUsers, hasPerm, PERM } from "./lib/permissions";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import ClientsPage from "./pages/ClientsPage";
@@ -14,6 +14,7 @@ import ExpensesPage from "./pages/ExpensesPage";
 import InvestmentsPage from "./pages/InvestmentsPage";
 import ReservesPage from "./pages/ReservesPage";
 import UsersPage from "./pages/UsersPage";
+import RolesPage from "./pages/RolesPage";
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -28,25 +29,52 @@ export default function App() {
     );
   }
 
-  const financeOk = canSeeFinance(user);
-  const adminOk = isAdmin(user);
+  // Первый доступный раздел — куда отправлять с «/», если нет дашборда.
+  const landing =
+    (hasPerm(user, PERM.dashboard) && "/") ||
+    (hasPerm(user, PERM.clients) && "/clients") ||
+    (hasPerm(user, PERM.orders) && "/orders") ||
+    (hasPerm(user, PERM.warehouse) && "/warehouse") ||
+    (canManageUsers(user) && "/users") ||
+    "/clients";
 
   return (
     <Layout>
       <Routes>
         <Route
           path="/"
-          element={financeOk ? <DashboardPage /> : <Navigate to="/clients" replace />}
+          element={
+            hasPerm(user, PERM.dashboard) ? (
+              <DashboardPage />
+            ) : (
+              <Navigate to={landing === "/" ? "/clients" : landing} replace />
+            )
+          }
         />
-        <Route path="/clients" element={<ClientsPage />} />
-        <Route path="/clients/:id" element={<ClientDetailPage />} />
-        <Route path="/orders" element={<OrdersPage />} />
-        <Route path="/orders/:id" element={<OrderDetailPage />} />
-        <Route path="/warehouse" element={<WarehousePage />} />
-        {financeOk && <Route path="/expenses" element={<ExpensesPage />} />}
-        {financeOk && <Route path="/investments" element={<InvestmentsPage />} />}
-        {financeOk && <Route path="/reserves" element={<ReservesPage />} />}
-        {adminOk && <Route path="/users" element={<UsersPage />} />}
+        {hasPerm(user, PERM.clients) && (
+          <Route path="/clients" element={<ClientsPage />} />
+        )}
+        {hasPerm(user, PERM.clients) && (
+          <Route path="/clients/:id" element={<ClientDetailPage />} />
+        )}
+        {hasPerm(user, PERM.orders) && <Route path="/orders" element={<OrdersPage />} />}
+        {hasPerm(user, PERM.orders) && (
+          <Route path="/orders/:id" element={<OrderDetailPage />} />
+        )}
+        {hasPerm(user, PERM.warehouse) && (
+          <Route path="/warehouse" element={<WarehousePage />} />
+        )}
+        {hasPerm(user, PERM.expenses) && (
+          <Route path="/expenses" element={<ExpensesPage />} />
+        )}
+        {hasPerm(user, PERM.investments) && (
+          <Route path="/investments" element={<InvestmentsPage />} />
+        )}
+        {hasPerm(user, PERM.reserves) && (
+          <Route path="/reserves" element={<ReservesPage />} />
+        )}
+        {canManageUsers(user) && <Route path="/users" element={<UsersPage />} />}
+        {canManageUsers(user) && <Route path="/roles" element={<RolesPage />} />}
         <Route path="/login" element={<Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

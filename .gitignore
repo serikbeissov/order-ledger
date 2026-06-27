@@ -13,6 +13,9 @@ frontend/dist/
 frontend/android/
 frontend/ios/
 
+# Бэкапы БД
+backups/
+
 # IDE / OS
 .vscode/
 .idea/

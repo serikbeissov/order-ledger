@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Order, OrderExpense, OrderItem, Return
+from .models import Order, OrderExpense, OrderItem, OrderStatusEvent, Return
 
 
 class OrderItemInline(admin.TabularInline):
@@ -35,3 +35,9 @@ class ReturnAdmin(admin.ModelAdmin):
 
 
 admin.site.register(OrderExpense)
+
+
+@admin.register(OrderStatusEvent)
+class OrderStatusEventAdmin(admin.ModelAdmin):
+    list_display = ["order", "summary", "issued_qty", "total_qty", "created_at"]
+    list_filter = ["code"]

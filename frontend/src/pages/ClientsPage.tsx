@@ -13,18 +13,30 @@ import {
   Th,
 } from "@/components/ui";
 import { balanceColor, formatMoney } from "@/lib/format";
+import { useAuth } from "@/api/auth";
+import { hasPerm } from "@/lib/permissions";
 
 export default function ClientsPage() {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const { data, isLoading } = useClients(search);
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const canCreate = hasPerm(user, "clients.add_client");
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Клиенты</h1>
-        <Button onClick={() => setOpen(true)}>+ Клиент</Button>
+        <div className="flex gap-2">
+          <a
+            href="/api/clients/export/"
+            className="inline-flex items-center rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-200"
+          >
+            Экспорт CSV
+          </a>
+          {canCreate && <Button onClick={() => setOpen(true)}>+ Клиент</Button>}
+        </div>
       </div>
       <Input
         placeholder="Поиск по имени или телефону…"

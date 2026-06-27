@@ -16,6 +16,7 @@ def frozen_capital(queryset=None) -> Decimal:
     if queryset is None:
         queryset = WarehouseItem.objects.all()
     items = queryset.filter(
-        status__in=[WarehouseItem.STATUS_IN_STOCK, WarehouseItem.STATUS_RESERVED]
+        is_archived=False,
+        status__in=[WarehouseItem.STATUS_IN_STOCK, WarehouseItem.STATUS_RESERVED],
     )
     return money(sum((i.full_cost for i in items), ZERO))

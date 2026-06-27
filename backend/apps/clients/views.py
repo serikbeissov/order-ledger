@@ -2,7 +2,8 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from apps.accounts.permissions import IsStaffNoDelete
+from apps.accounts.permissions import ConfigurableModelPermissions
+from apps.common.export import csv_response
 
 from .models import Client
 from .serializers import (
@@ -10,6 +11,7 @@ from .serializers import (
     ClientDetailSerializer,
     ClientListSerializer,
 )
+from .services import client_balance
 
 
 class ClientViewSet(viewsets.ModelViewSet):
@@ -19,7 +21,7 @@ class ClientViewSet(viewsets.ModelViewSet):
     """
 
     queryset = Client.objects.all()
-    permission_classes = [IsStaffNoDelete]
+    permission_classes = [ConfigurableModelPermissions]
     search_fields = ["full_name", "phone"]
     ordering_fields = ["full_name", "created_at"]
 
@@ -32,6 +34,17 @@ class ClientViewSet(viewsets.ModelViewSet):
         # мягкое архивирование вместо физического удаления (§8)
         instance.is_archived = True
         instance.save(update_fields=["is_archived"])
+
+    @action(detail=False, methods=["get"])
+    def export(self, request):
+        """CSV-экспорт клиентов с балансом."""
+        rows = [
+            [c.id, c.full_name, c.phone, client_balance(c)]
+            for c in self.filter_queryset(self.get_queryset())
+        ]
+        return csv_response(
+            "clients.csv", ["ID", "ФИО", "Телефон", "Баланс (₸)"], rows
+        )
 
     @action(detail=True, methods=["post"])
     def movements(self, request, pk=None):

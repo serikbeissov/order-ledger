@@ -26,6 +26,26 @@ export function formatDate(value: string | null | undefined): string {
   return dateFmt.format(d);
 }
 
+/**
+ * Группировка по тысячам для полей ввода: "100000" → "100 000",
+ * "100000.5" → "100 000,5". Хранится «сырое» значение, показывается удобное.
+ */
+export function groupDigits(raw: string): string {
+  if (raw === null || raw === undefined || raw === "") return "";
+  const normalized = String(raw).replace(",", ".");
+  const [intPart, decPart] = normalized.split(".");
+  const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  return decPart !== undefined ? `${grouped},${decPart}` : grouped;
+}
+
+/** Разбор введённой строки в «сырое» число: убираем пробелы, запятую→точка. */
+export function parseMoneyInput(display: string): string {
+  return display
+    .replace(/\s/g, "")
+    .replace(",", ".")
+    .replace(/[^\d.]/g, "");
+}
+
 /** Цвет баланса клиента: переплата — зелёный, долг — красный, ноль — серый (§5). */
 export function balanceColor(value: string | number): string {
   const num = typeof value === "string" ? Number(value) : value;

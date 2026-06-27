@@ -7,9 +7,10 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from "recharts";
+import { Link } from "react-router-dom";
 import { useDashboard } from "@/api/hooks";
-import { Badge, Card, CardBody, Spinner } from "@/components/ui";
-import { formatMoney } from "@/lib/format";
+import { Badge, Card, CardBody, CardHeader, Spinner, Table, Td, Th } from "@/components/ui";
+import { formatDate, formatMoney } from "@/lib/format";
 
 function currentPeriod(): string {
   const d = new Date();
@@ -135,6 +136,111 @@ export default function DashboardPage() {
           value={formatMoney(data.reserve_target_hints.monthly)}
         />
       </div>
+
+      {/* Налог 4% с оборота через терминал */}
+      <Card>
+        <CardHeader title="Налог 4% (оборот через терминал)" />
+        <CardBody>
+          <div className="grid gap-4 sm:grid-cols-4">
+            <Row label="Оборот (терминал)" value={data.tax.terminal_turnover} />
+            <Row label="Налог 4%" value={data.tax.estimate} />
+            <Row label="Отложено в резерв" value={data.tax.reserved} />
+            <Row label="Не хватает в резерве" value={data.tax.shortfall} bold />
+          </div>
+        </CardBody>
+      </Card>
+
+      {/* Должники + зависшие заказы */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader title={`Должники (${data.debtors.length})`} />
+          <CardBody>
+            {data.debtors.length === 0 ? (
+              <p className="text-sm text-gray-400">Долгов нет 🎉</p>
+            ) : (
+              <Table>
+                <thead>
+                  <tr>
+                    <Th>Клиент</Th>
+                    <Th>Телефон</Th>
+                    <Th className="text-right">Долг</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.debtors.map((d) => (
+                    <tr key={d.id} className="hover:bg-gray-50">
+                      <Td>
+                        <Link to={`/clients/${d.id}`} className="text-brand-accent hover:underline">
+                          {d.full_name}
+                        </Link>
+                      </Td>
+                      <Td className="text-gray-500">{d.phone || "—"}</Td>
+                      <Td className="text-right font-medium text-red-600">
+                        {formatMoney(d.debt)}
+                      </Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            )}
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardHeader title={`Зависшие заказы (${data.stale_orders.length})`} />
+          <CardBody>
+            {data.stale_orders.length === 0 ? (
+              <p className="text-sm text-gray-400">Нет зависших заказов</p>
+            ) : (
+              <Table>
+                <thead>
+                  <tr>
+                    <Th>Заказ</Th>
+                    <Th>Статус</Th>
+                    <Th className="text-right">Дней</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.stale_orders.map((o) => (
+                    <tr key={o.id} className="hover:bg-gray-50">
+                      <Td>
+                        <Link to={`/orders/${o.id}`} className="text-brand-accent hover:underline">
+                          №{o.id} · {o.client_name}
+                        </Link>
+                      </Td>
+                      <Td className="text-gray-500">{o.status}</Td>
+                      <Td className="text-right font-medium">{o.days}</Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            )}
+          </CardBody>
+        </Card>
+      </div>
+
+      {/* Дни рождения */}
+      {data.birthdays.length > 0 && (
+        <Card>
+          <CardHeader title="🎂 Дни рождения (ближайшие 2 недели)" />
+          <CardBody>
+            <div className="flex flex-wrap gap-2">
+              {data.birthdays.map((b) => (
+                <Link
+                  key={b.id}
+                  to={`/clients/${b.id}`}
+                  className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50"
+                >
+                  {b.full_name} — {formatDate(b.birth_date)}{" "}
+                  <span className="text-gray-400">
+                    ({b.in_days === 0 ? "сегодня" : `через ${b.in_days} дн.`})
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </CardBody>
+        </Card>
+      )}
     </div>
   );
 }

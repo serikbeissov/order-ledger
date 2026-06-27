@@ -126,6 +126,34 @@ class OrderExpense(models.Model):
         return f"{self.get_type_display()}: {self.amount} ₸"
 
 
+class OrderStatusEvent(models.Model):
+    """
+    Запись в истории статуса заказа (CLAUDE.md §4.4).
+
+    Общий статус заказа вычисляется из позиций; при его изменении (смена этапа
+    или прогресс выдачи) сюда добавляется запись с датой — чтобы видеть, когда
+    что произошло.
+    """
+
+    order = models.ForeignKey(
+        Order, on_delete=models.CASCADE, related_name="status_events",
+        verbose_name="Заказ",
+    )
+    code = models.CharField("Код статуса", max_length=16)
+    summary = models.CharField("Статус", max_length=255)
+    issued_qty = models.PositiveIntegerField("Выдано единиц", default=0)
+    total_qty = models.PositiveIntegerField("Всего единиц", default=0)
+    created_at = models.DateTimeField("Когда", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Событие статуса заказа"
+        verbose_name_plural = "История статуса заказа"
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"Заказ №{self.order_id}: {self.summary}"
+
+
 class Return(models.Model):
     """
     Возврат — сдача товара клиентом (CLAUDE.md §3.2, §4.1).

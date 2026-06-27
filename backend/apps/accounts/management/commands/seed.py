@@ -24,8 +24,9 @@ DEFAULT_CATEGORIES = [
 ]
 
 # Операционные приложения, к которым у менеджера/сотрудника есть доступ.
+# dashboard включён — менеджер видит дашборд (право dashboard.view_dashboard).
 MANAGER_APPS = [
-    "clients", "orders", "warehouse", "expenses", "finance",
+    "clients", "orders", "warehouse", "expenses", "finance", "dashboard",
 ]
 STAFF_APPS = ["clients", "orders", "warehouse"]
 

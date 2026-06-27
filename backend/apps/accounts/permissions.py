@@ -1,15 +1,43 @@
 """
-DRF-пермишены по ролям (CLAUDE.md §3.3).
+DRF-пермишены order-ledger (CLAUDE.md §3.3).
 
-Права проверяются на бэкенде; фронт лишь скрывает недоступное.
+Доступ управляется реальными Django-правами (Groups + индивидуальные права):
+что админ выдал роли/пользователю, то и доступно. Видимость раздела = право
+`view_<model>`, действия = `add_/change_/delete_<model>`. Проверка — на бэкенде;
+фронт лишь скрывает недоступное.
 """
-from rest_framework.permissions import SAFE_METHODS, BasePermission
+from rest_framework.permissions import (
+    SAFE_METHODS,
+    BasePermission,
+    DjangoModelPermissions,
+)
 
-from .roles import is_admin, is_manager_or_admin, user_role, ROLE_STAFF
+from .roles import is_admin
+
+
+class ConfigurableModelPermissions(DjangoModelPermissions):
+    """
+    Как DjangoModelPermissions, но **чтение (GET) тоже требует `view_<model>`** —
+    чтобы видимость раздела управлялась правом, а не была открыта всем.
+
+    Вложенные write-экшены вьюсета (movements, items, issue, returns, expenses и
+    т.п.) проверяются здесь по HTTP-методу против модели вьюсета
+    (POST→add_, PATCH/PUT→change_, DELETE→delete_).
+    """
+
+    perms_map = {
+        "GET": ["%(app_label)s.view_%(model_name)s"],
+        "OPTIONS": [],
+        "HEAD": [],
+        "POST": ["%(app_label)s.add_%(model_name)s"],
+        "PUT": ["%(app_label)s.change_%(model_name)s"],
+        "PATCH": ["%(app_label)s.change_%(model_name)s"],
+        "DELETE": ["%(app_label)s.delete_%(model_name)s"],
+    }
 
 
 class IsAdmin(BasePermission):
-    """Только администратор (управление пользователями, системные настройки)."""
+    """Только администратор (управление пользователями, роли, системные настройки)."""
 
     message = "Доступно только администратору."
 
@@ -17,26 +45,15 @@ class IsAdmin(BasePermission):
         return is_admin(request.user)
 
 
-class IsManagerOrAdmin(BasePermission):
-    """Менеджер или администратор (расходы, инвестиции, резервы, дашборд)."""
+class HasDashboardAccess(BasePermission):
+    """Доступ к дашборду по праву `dashboard.view_dashboard` (§4.5–4.7)."""
 
-    message = "Доступно только менеджеру или администратору."
-
-    def has_permission(self, request, view):
-        return is_manager_or_admin(request.user)
-
-
-class IsStaffNoDelete(BasePermission):
-    """
-    Операционный доступ для всех ролей, но сотрудник не может удалять/архивировать
-    (DELETE запрещён сотруднику; чтение и изменение — разрешены).
-    """
-
-    message = "Сотрудник не может выполнять удаление."
+    message = "Нет доступа к дашборду."
 
     def has_permission(self, request, view):
-        if not request.user or not request.user.is_authenticated:
-            return False
-        if request.method == "DELETE" and user_role(request.user) == ROLE_STAFF:
-            return False
-        return True
+        user = request.user
+        return bool(
+            user
+            and user.is_authenticated
+            and (user.is_superuser or user.has_perm("dashboard.view_dashboard"))
+        )

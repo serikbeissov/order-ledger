@@ -76,24 +76,16 @@ export default function ExpensesPage() {
       <div>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-semibold">Расходы (факт)</h2>
-          <div className="flex gap-2">
-            <a
-              href="/api/expenses/export/"
-              className="inline-flex items-center rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-200"
+          {canCreate && (
+            <Button
+              onClick={() => {
+                setPrefill(null);
+                setOpenExpense(true);
+              }}
             >
-              Экспорт CSV
-            </a>
-            {canCreate && (
-              <Button
-                onClick={() => {
-                  setPrefill(null);
-                  setOpenExpense(true);
-                }}
-              >
-                + Записать расход
-              </Button>
-            )}
-          </div>
+              + Записать расход
+            </Button>
+          )}
         </div>
 
         <Select

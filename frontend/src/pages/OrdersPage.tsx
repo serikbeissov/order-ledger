@@ -19,10 +19,22 @@ import { statusColor } from "@/lib/status";
 import { useAuth } from "@/api/auth";
 import { hasPerm } from "@/lib/permissions";
 
+const STATUS_OPTIONS = [
+  ["", "Все статусы"],
+  ["ordered", "Заказан"],
+  ["in_transit", "В пути"],
+  ["received", "Получен"],
+  ["issued", "Выдан"],
+];
+
 export default function OrdersPage() {
   const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("");
   const [open, setOpen] = useState(false);
-  const { data, isLoading } = useOrders({ search });
+  const { data, isLoading } = useOrders({
+    search,
+    ...(status ? { status } : {}),
+  });
   const navigate = useNavigate();
   const { user } = useAuth();
   const canCreate = hasPerm(user, "orders.add_order");
@@ -31,22 +43,23 @@ export default function OrdersPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold">Заказы</h1>
-        <div className="flex gap-2">
-          <a
-            href="/api/orders/export/"
-            className="inline-flex items-center rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-200"
-          >
-            Экспорт CSV
-          </a>
-          {canCreate && <Button onClick={() => setOpen(true)}>+ Заказ</Button>}
-        </div>
+        {canCreate && <Button onClick={() => setOpen(true)}>+ Заказ</Button>}
       </div>
-      <Input
-        placeholder="Поиск по клиенту…"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        className="max-w-sm"
-      />
+      <div className="flex flex-wrap gap-2">
+        <Input
+          placeholder="Поиск по клиенту…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="max-w-sm"
+        />
+        <Select value={status} onChange={(e) => setStatus(e.target.value)} className="max-w-44">
+          {STATUS_OPTIONS.map(([v, l]) => (
+            <option key={v} value={v}>
+              {l}
+            </option>
+          ))}
+        </Select>
+      </div>
       <Card>
         {isLoading ? (
           <Spinner />

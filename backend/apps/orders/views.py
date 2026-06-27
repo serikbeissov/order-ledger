@@ -42,6 +42,22 @@ class OrderViewSet(viewsets.ModelViewSet):
         client_id = self.request.query_params.get("client")
         if client_id:
             qs = qs.filter(client_id=client_id)
+        # фильтр по вычисляемому статусу заказа (= самый ранний статус позиций, §4.4)
+        status_code = self.request.query_params.get("status")
+        progress = [
+            OrderItem.STATUS_ORDERED, OrderItem.STATUS_IN_TRANSIT,
+            OrderItem.STATUS_RECEIVED, OrderItem.STATUS_ISSUED,
+        ]
+        if status_code == OrderItem.STATUS_ISSUED:
+            # все позиции выданы: есть позиции и нет «невыданных»
+            qs = qs.filter(items__isnull=False).exclude(
+                items__status__in=progress[:3]
+            ).distinct()
+        elif status_code in progress[:3]:
+            earlier = progress[:progress.index(status_code)]
+            qs = qs.filter(items__status=status_code).exclude(
+                items__status__in=earlier
+            ).distinct()
         return qs
 
     def perform_create(self, serializer):

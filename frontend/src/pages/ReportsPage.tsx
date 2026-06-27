@@ -28,12 +28,6 @@ export default function ReportsPage() {
       ? "/api/backup/excel/"
       : `/api/backup/excel/?period=${backupMonth}`;
 
-  const csv = [
-    { href: "/api/clients/export/", label: "Клиенты (CSV)", show: hasPerm(user, "clients.view_client") },
-    { href: "/api/orders/export/", label: "Заказы (CSV)", show: hasPerm(user, "orders.view_order") },
-    { href: "/api/expenses/export/", label: "Расходы (CSV)", show: hasPerm(user, "expenses.view_expense") },
-  ];
-
   return (
     <div className="space-y-6">
       <div className="no-print flex flex-wrap items-center justify-between gap-2">
@@ -78,24 +72,6 @@ export default function ReportsPage() {
         </Card>
       )}
 
-      {/* CSV-выгрузки */}
-      <Card className="no-print">
-        <CardHeader title="Выгрузки CSV" />
-        <CardBody>
-          <p className="mb-3 text-sm text-slate">Отдельные таблицы для сверки (Excel).</p>
-          <div className="flex flex-wrap gap-2">
-            {csv.filter((c) => c.show).map((c) => (
-              <a
-                key={c.href}
-                href={c.href}
-                className="inline-flex items-center rounded-full bg-fog px-5 py-2 text-sm font-medium text-carbon hover:bg-chalk"
-              >
-                {c.label}
-              </a>
-            ))}
-          </div>
-        </CardBody>
-      </Card>
     </div>
   );
 }

@@ -28,15 +28,7 @@ export default function ClientsPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold">Клиенты</h1>
-        <div className="flex gap-2">
-          <a
-            href="/api/clients/export/"
-            className="inline-flex items-center rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-200"
-          >
-            Экспорт CSV
-          </a>
-          {canCreate && <Button onClick={() => setOpen(true)}>+ Клиент</Button>}
-        </div>
+        {canCreate && <Button onClick={() => setOpen(true)}>+ Клиент</Button>}
       </div>
       <Input
         placeholder="Поиск по имени или телефону…"

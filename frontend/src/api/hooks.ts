@@ -97,7 +97,7 @@ export function useAddMovement(clientId: number) {
 }
 
 // --- заказы ------------------------------------------------------------------
-export function useOrders(params?: { client?: number; search?: string }) {
+export function useOrders(params?: { client?: number; search?: string; status?: string }) {
   return useQuery({
     queryKey: ["orders", params],
     queryFn: () => getList<OrderListItem>("/orders/", params),

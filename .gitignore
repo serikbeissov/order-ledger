@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.sqlite3
+backend/staticfiles/
+.env
+
+# Node / frontend
+node_modules/
+frontend/dist/
+
+# Capacitor нативные платформы (генерируются)
+frontend/android/
+frontend/ios/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store

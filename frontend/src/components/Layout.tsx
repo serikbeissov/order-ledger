@@ -72,8 +72,8 @@ export default function Layout({ children }: { children: ReactNode }) {
 
   const head = (
     <div className="border-b border-gray-100 px-5 py-4">
-      <div className="text-lg font-bold tracking-tight text-brand">{brand}</div>
-      <div className="text-xs text-gray-400">order-ledger</div>
+      <div className="font-display text-lg font-bold tracking-tight text-brand">{brand}</div>
+      <div className="text-xs text-slate">order-ledger</div>
     </div>
   );
 
@@ -115,10 +115,10 @@ export default function Layout({ children }: { children: ReactNode }) {
               <line x1="3" y1="18" x2="21" y2="18" />
             </svg>
           </button>
-          <span className="font-bold text-brand">{brand}</span>
+          <span className="font-display font-bold text-brand">{brand}</span>
         </header>
 
-        <main className="min-w-0 flex-1 overflow-x-hidden bg-gray-50 p-4 md:p-6">
+        <main className="min-w-0 flex-1 overflow-x-hidden bg-mist p-4 md:p-6">
           <RecurringReminder user={user} />
           {children}
         </main>

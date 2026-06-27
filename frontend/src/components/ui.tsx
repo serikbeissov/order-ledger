@@ -18,7 +18,7 @@ export function Card({
   className?: string;
 }) {
   return (
-    <div className={clsx("rounded-xl border border-gray-200 bg-white shadow-sm", className)}>
+    <div className={clsx("rounded-lg border border-chalk bg-paper shadow-sm", className)}>
       {children}
     </div>
   );
@@ -42,16 +42,17 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 export function Button({ variant = "primary", className, ...props }: ButtonProps) {
+  // Пилюли: primary — Carbon-filled, secondary — рамка Carbon (по гайду).
   const styles = {
     primary: "bg-brand text-white hover:bg-black",
-    secondary: "bg-gray-100 text-gray-800 hover:bg-gray-200",
-    ghost: "text-gray-600 hover:bg-gray-100",
+    secondary: "border border-carbon/20 bg-white text-carbon hover:bg-fog",
+    ghost: "text-graphite hover:bg-fog",
     danger: "bg-red-600 text-white hover:bg-red-700",
   }[variant];
   return (
     <button
       className={clsx(
-        "inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition disabled:opacity-50",
+        "inline-flex items-center justify-center rounded-full px-5 py-2 text-sm font-medium transition disabled:opacity-50",
         styles,
         className,
       )}

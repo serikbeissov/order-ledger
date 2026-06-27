@@ -17,7 +17,7 @@ function currentPeriod(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-const POOL_COLORS = ["#b08d57", "#6b7280", "#1a1a1a"];
+const POOL_COLORS = ["#ff682c", "#828282", "#202020"]; // Signal Orange / Slate / Carbon
 
 function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
@@ -66,7 +66,7 @@ export default function DashboardPage() {
           >
             <div>
               <div className="text-sm text-gray-500">Деньги на счету</div>
-              <div className="text-4xl font-bold text-brand">{formatMoney(m.total)}</div>
+              <div className="font-display text-4xl font-bold text-brand">{formatMoney(m.total)}</div>
             </div>
             <span className="text-gray-400">{expanded ? "Свернуть ▲" : "Подробнее ▼"}</span>
           </button>

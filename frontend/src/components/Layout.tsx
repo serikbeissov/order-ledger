@@ -19,6 +19,7 @@ const NAV: NavItem[] = [
   { to: "/expenses", label: "Расходы", show: (u) => hasPerm(u, PERM.expenses) },
   { to: "/investments", label: "Инвестиции", show: (u) => hasPerm(u, PERM.investments) },
   { to: "/reserves", label: "Резервы", show: (u) => hasPerm(u, PERM.reserves) },
+  { to: "/reports", label: "Отчёты", show: (u) => hasPerm(u, PERM.dashboard) },
   { to: "/users", label: "Пользователи", show: (u) => canManageUsers(u) },
   { to: "/roles", label: "Роли и права", show: (u) => canManageUsers(u) },
   { to: "/audit", label: "Аудит", show: (u) => canManageUsers(u) },

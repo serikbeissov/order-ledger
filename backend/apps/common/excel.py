@@ -38,7 +38,13 @@ def _add_sheet(wb, title, header, rows):
     return ws
 
 
-def build_backup_workbook():
+def build_backup_workbook(period: str | None = None):
+    """
+    Собрать workbook. Если period='YYYY-MM' — операционные листы (движения,
+    заказы, позиции, возвраты, расходы, инвестиции, движения резервов) ограничены
+    месяцем по своей дате; справочные (клиенты, склад, категории, напоминания,
+    инвесторы, резервы, пользователи, роли) — всегда полностью.
+    """
     from openpyxl import Workbook
 
     from apps.clients.models import BalanceMovement, Client
@@ -53,9 +59,18 @@ def build_backup_workbook():
     from apps.warehouse.models import WarehouseItem
     from apps.expenses.models import Expense, ExpenseCategory, RecurringExpense
     from apps.finance.models import Investment, Investor, Reserve, ReserveMovement
-    from apps.finance.services import investments_pool, reserve_balance
+    from apps.finance.services import reserve_balance
     from apps.accounts.roles import user_role
     from django.contrib.auth.models import Group, User
+
+    df = dt = None
+    if period:
+        from apps.expenses.services import month_bounds
+        df, dt = month_bounds(period)
+
+    def maybe(qs, lookup):
+        """Ограничить queryset месяцем по полю lookup (если задан период)."""
+        return qs.filter(**{lookup: (df, dt)}) if period else qs
 
     wb = Workbook()
     wb.remove(wb.active)  # убрать пустой лист по умолчанию
@@ -77,11 +92,13 @@ def build_backup_workbook():
         [[m.id, m.client.full_name, m.order_id, m.get_direction_display(),
           m.amount, m.get_method_display(), m.comment, m.paid_at,
           m.created_at.replace(tzinfo=None)]
-         for m in BalanceMovement.objects.select_related("client")])
+         for m in maybe(BalanceMovement.objects.select_related("client"),
+                        "paid_at__range")])
 
     # --- Заказы ---
     order_rows = []
-    for o in Order.objects.select_related("client", "created_by"):
+    for o in maybe(Order.objects.select_related("client", "created_by"),
+                   "created_at__date__range"):
         c = order_calculation(o)
         st = order_status(o)
         order_rows.append([
@@ -109,7 +126,7 @@ def build_backup_workbook():
           item_returned_qty(i), i.sale_price, i.delivery_price, i.country,
           i.site, i.track_number, i.get_status_display(),
           i.purchase_date, i.delivery_date]
-         for i in OrderItem.objects.all()])
+         for i in maybe(OrderItem.objects.all(), "order__created_at__date__range")])
 
     # --- Возвраты ---
     _add_sheet(wb, "Возвраты",
@@ -117,13 +134,13 @@ def build_backup_workbook():
          "Дата", "Комментарий"],
         [[r.id, r.order_item_id, r.qty, r.get_disposition_display(),
           r.refund_amount, r.return_date, r.comment]
-         for r in Return.objects.all()])
+         for r in maybe(Return.objects.all(), "return_date__range")])
 
     # --- Доп.расходы заказа ---
     _add_sheet(wb, "Доп.расходы заказа",
         ["ID", "Заказ", "Тип", "Сумма", "Комментарий"],
         [[e.id, e.order_id, e.get_type_display(), e.amount, e.comment]
-         for e in OrderExpense.objects.all()])
+         for e in maybe(OrderExpense.objects.all(), "order__created_at__date__range")])
 
     # --- Склад ---
     _add_sheet(wb, "Склад",
@@ -155,7 +172,8 @@ def build_backup_workbook():
         [[e.id, e.category.name, e.amount, e.get_method_display(),
           e.expense_date, e.period,
           e.recurring.name if e.recurring else "", e.comment]
-         for e in Expense.objects.select_related("category", "recurring")])
+         for e in maybe(Expense.objects.select_related("category", "recurring"),
+                        "expense_date__range")])
 
     # --- Инвесторы / Инвестиции ---
     _add_sheet(wb, "Инвесторы",
@@ -165,7 +183,7 @@ def build_backup_workbook():
         ["ID", "Инвестор", "Направление", "Сумма", "Способ", "Дата", "Комментарий"],
         [[i.id, i.investor.name, i.get_direction_display(), i.amount,
           i.get_method_display(), i.moved_at, i.comment]
-         for i in Investment.objects.select_related("investor")])
+         for i in maybe(Investment.objects.select_related("investor"), "moved_at__range")])
 
     # --- Резервы / движения ---
     _add_sheet(wb, "Резервы",
@@ -177,7 +195,7 @@ def build_backup_workbook():
         ["ID", "Резерв", "Направление", "Сумма", "Дата", "Комментарий"],
         [[m.id, m.reserve.name, m.get_direction_display(), m.amount,
           m.moved_at, m.comment]
-         for m in ReserveMovement.objects.select_related("reserve")])
+         for m in maybe(ReserveMovement.objects.select_related("reserve"), "moved_at__range")])
 
     # --- Пользователи / Роли ---
     _add_sheet(wb, "Пользователи",
@@ -195,8 +213,8 @@ def build_backup_workbook():
     return wb
 
 
-def backup_excel_response() -> HttpResponse:
-    wb = build_backup_workbook()
+def backup_excel_response(period: str | None = None) -> HttpResponse:
+    wb = build_backup_workbook(period)
     buf = BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -206,5 +224,8 @@ def backup_excel_response() -> HttpResponse:
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         ),
     )
-    response["Content-Disposition"] = 'attachment; filename="order-ledger-backup.xlsx"'
+    suffix = f"-{period}" if period else "-all"
+    response["Content-Disposition"] = (
+        f'attachment; filename="order-ledger-backup{suffix}.xlsx"'
+    )
     return response

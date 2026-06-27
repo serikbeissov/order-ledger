@@ -10,8 +10,12 @@ from .services import dashboard_payload
 @api_view(["GET"])
 @permission_classes([IsAdmin])
 def backup_excel(request):
-    """GET /api/backup/excel/ — полный бэкап всех данных в .xlsx (только админ)."""
-    return backup_excel_response()
+    """
+    GET /api/backup/excel/?period=YYYY-MM — бэкап всех данных в .xlsx (только
+    админ). Без period — за всё время; с period — операционные листы за месяц.
+    """
+    period = request.query_params.get("period") or None
+    return backup_excel_response(period)
 
 
 @api_view(["GET"])

@@ -16,6 +16,7 @@ import ReservesPage from "./pages/ReservesPage";
 import UsersPage from "./pages/UsersPage";
 import RolesPage from "./pages/RolesPage";
 import AuditPage from "./pages/AuditPage";
+import ReportsPage from "./pages/ReportsPage";
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -73,6 +74,9 @@ export default function App() {
         )}
         {hasPerm(user, PERM.reserves) && (
           <Route path="/reserves" element={<ReservesPage />} />
+        )}
+        {hasPerm(user, PERM.dashboard) && (
+          <Route path="/reports" element={<ReportsPage />} />
         )}
         {canManageUsers(user) && <Route path="/users" element={<UsersPage />} />}
         {canManageUsers(user) && <Route path="/roles" element={<RolesPage />} />}

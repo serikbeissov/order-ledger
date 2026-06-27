@@ -9,8 +9,6 @@ import {
 } from "recharts";
 import { Link } from "react-router-dom";
 import { useDashboard } from "@/api/hooks";
-import { useAuth } from "@/api/auth";
-import { canManageUsers } from "@/lib/permissions";
 import { Badge, Card, CardBody, CardHeader, Spinner, Table, Td, Th } from "@/components/ui";
 import { formatDate, formatMoney } from "@/lib/format";
 
@@ -36,7 +34,6 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
 export default function DashboardPage() {
   const [period, setPeriod] = useState(currentPeriod());
   const [expanded, setExpanded] = useState(true);
-  const { user } = useAuth();
   const { data, isLoading } = useDashboard(period);
 
   if (isLoading || !data) return <Spinner />;
@@ -52,22 +49,12 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold">Дашборд</h1>
-        <div className="flex items-center gap-2">
-          {canManageUsers(user) && (
-            <a
-              href="/api/backup/excel/"
-              className="inline-flex items-center rounded-lg bg-brand px-4 py-1.5 text-sm font-medium text-white hover:bg-black"
-            >
-              ⤓ Бэкап в Excel
-            </a>
-          )}
-          <input
-            type="month"
-            value={period}
-            onChange={(e) => setPeriod(e.target.value)}
-            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
-          />
-        </div>
+        <input
+          type="month"
+          value={period}
+          onChange={(e) => setPeriod(e.target.value)}
+          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+        />
       </div>
 
       {/* Главная плитка «Деньги на счету» (§4.7) */}

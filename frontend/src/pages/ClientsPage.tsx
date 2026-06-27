@@ -26,7 +26,7 @@ export default function ClientsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold">Клиенты</h1>
         <div className="flex gap-2">
           <a

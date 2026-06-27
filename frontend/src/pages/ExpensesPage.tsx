@@ -74,7 +74,7 @@ export default function ExpensesPage() {
 
       {/* Секция 2 — фактические расходы */}
       <div>
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-semibold">Расходы (факт)</h2>
           <div className="flex gap-2">
             <a

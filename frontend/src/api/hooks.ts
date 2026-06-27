@@ -5,6 +5,7 @@ import {
 } from "@tanstack/react-query";
 import { api, ensureCsrf } from "./client";
 import type {
+  AuditLog,
   ClientDetail,
   ClientListItem,
   Dashboard,
@@ -331,6 +332,14 @@ export function useReserveMovement(reserveId: number) {
     mutationFn: (body: unknown) =>
       post(`/reserves/${reserveId}/movements/`, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["reserves"] }),
+  });
+}
+
+// --- аудит -------------------------------------------------------------------
+export function useAudit(params?: object) {
+  return useQuery({
+    queryKey: ["audit", params],
+    queryFn: () => getList<AuditLog>("/audit/", params),
   });
 }
 

@@ -117,6 +117,7 @@ export default function ClientDetailPage() {
                 <Th>Дата</Th>
                 <Th>Тип</Th>
                 <Th>Способ</Th>
+                <Th>Заказ</Th>
                 <Th>Комментарий</Th>
                 <Th className="text-right">Сумма</Th>
               </tr>
@@ -131,6 +132,15 @@ export default function ClientDetailPage() {
                     </Badge>
                   </Td>
                   <Td>{mv.method_display}</Td>
+                  <Td>
+                    {mv.order ? (
+                      <Link to={`/orders/${mv.order}`} className="text-brand-accent hover:underline">
+                        №{mv.order}
+                      </Link>
+                    ) : (
+                      <span className="text-gray-300">—</span>
+                    )}
+                  </Td>
                   <Td className="text-gray-500">{mv.comment}</Td>
                   <Td className="text-right">{formatMoney(mv.amount)}</Td>
                 </tr>
@@ -175,17 +185,23 @@ function MovementModal({
   onClose: () => void;
 }) {
   const add = useAddMovement(clientId);
+  const { data: orders } = useOrders({ client: clientId });
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState("cash");
   const [comment, setComment] = useState("");
+  const [orderId, setOrderId] = useState<string>("");
   const [paidAt, setPaidAt] = useState(() => new Date().toISOString().slice(0, 10));
 
   async function submit() {
     if (!direction) return;
-    await add.mutateAsync({ direction, amount, method, comment, paid_at: paidAt });
+    await add.mutateAsync({
+      direction, amount, method, comment, paid_at: paidAt,
+      order: orderId ? Number(orderId) : null,
+    });
     onClose();
     setAmount("");
     setComment("");
+    setOrderId("");
   }
 
   return (
@@ -207,6 +223,16 @@ function MovementModal({
         </Field>
         <Field label="Дата">
           <Input type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
+        </Field>
+        <Field label="Привязать к заказу (опц.)">
+          <Select value={orderId} onChange={(e) => setOrderId(e.target.value)}>
+            <option value="">— без привязки —</option>
+            {orders?.results.map((o) => (
+              <option key={o.id} value={o.id}>
+                Заказ №{o.id} — {o.status.label}
+              </option>
+            ))}
+          </Select>
         </Field>
         <Field label="Комментарий">
           <Input value={comment} onChange={(e) => setComment(e.target.value)} />

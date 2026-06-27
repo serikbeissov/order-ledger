@@ -15,6 +15,7 @@ import InvestmentsPage from "./pages/InvestmentsPage";
 import ReservesPage from "./pages/ReservesPage";
 import UsersPage from "./pages/UsersPage";
 import RolesPage from "./pages/RolesPage";
+import AuditPage from "./pages/AuditPage";
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -75,6 +76,7 @@ export default function App() {
         )}
         {canManageUsers(user) && <Route path="/users" element={<UsersPage />} />}
         {canManageUsers(user) && <Route path="/roles" element={<RolesPage />} />}
+        {canManageUsers(user) && <Route path="/audit" element={<AuditPage />} />}
         <Route path="/login" element={<Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

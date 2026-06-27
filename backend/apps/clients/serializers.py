@@ -15,7 +15,7 @@ class BalanceMovementSerializer(serializers.ModelSerializer):
     class Meta:
         model = BalanceMovement
         fields = [
-            "id", "client", "direction", "direction_display", "amount",
+            "id", "client", "order", "direction", "direction_display", "amount",
             "method", "method_display", "comment", "paid_at", "created_at",
         ]
         read_only_fields = ["created_at"]

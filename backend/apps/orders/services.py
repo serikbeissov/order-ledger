@@ -81,6 +81,20 @@ def order_profit(order: Order) -> Decimal:
     return order_calculation(order)["profit"]
 
 
+def order_paid(order: Order) -> Decimal:
+    """
+    Оплачено по заказу = Σ платежей (deposit) с привязкой к заказу − Σ возвратов
+    (refund) по нему. Учитываются только движения с явной привязкой order (§4.2).
+    """
+    total = ZERO
+    for m in order.payments.all():
+        if m.direction == "deposit":
+            total += m.amount
+        else:
+            total -= m.amount
+    return money(total)
+
+
 # --- Статус и выдача (§4.4) --------------------------------------------------
 def is_order_completed(order: Order) -> bool:
     """Завершённый заказ = все позиции выданы полностью (§4.7)."""

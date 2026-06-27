@@ -48,6 +48,11 @@ class BalanceMovement(TimeStampedModel):
         Client, on_delete=models.PROTECT, related_name="movements",
         verbose_name="Клиент",
     )
+    # необязательная привязка платежа к конкретному заказу (§4.2)
+    order = models.ForeignKey(
+        "orders.Order", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="payments", verbose_name="Заказ",
+    )
     direction = models.CharField(
         "Направление", max_length=10, choices=DIRECTION_CHOICES
     )

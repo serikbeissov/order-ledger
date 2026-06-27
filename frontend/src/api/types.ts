@@ -22,6 +22,7 @@ export interface ClientListItem {
 export interface BalanceMovement {
   id: number;
   client: number;
+  order: number | null;
   direction: "deposit" | "refund";
   direction_display: string;
   amount: Money;
@@ -137,6 +138,8 @@ export interface OrderDetail {
   status: OrderStatus;
   status_history: OrderStatusEvent[];
   client_balance: Money;
+  paid: Money;
+  remaining: Money;
   tax_hint: Money;
 }
 
@@ -318,4 +321,19 @@ export interface PermissionCatalogEntry {
   model: string;
   model_label: string;
   permissions: CatalogPermission[];
+}
+
+export interface AuditLog {
+  id: number;
+  created_at: string;
+  user: number | null;
+  username: string;
+  action: "create" | "update" | "delete";
+  action_display: string;
+  app_label: string;
+  model: string;
+  model_label: string;
+  object_id: string;
+  object_repr: string;
+  changes: Record<string, { from?: unknown; to?: unknown; action?: string; ids?: number[] }>;
 }

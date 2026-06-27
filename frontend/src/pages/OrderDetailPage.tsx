@@ -24,7 +24,7 @@ import {
   Td,
   Th,
 } from "@/components/ui";
-import { balanceColor, formatDate, formatMoney } from "@/lib/format";
+import { formatDate, formatMoney } from "@/lib/format";
 import { useAuth } from "@/api/auth";
 import { hasPerm } from "@/lib/permissions";
 import NotesCard from "@/components/NotesCard";
@@ -48,8 +48,10 @@ export default function OrderDetailPage() {
   const [addExpense, setAddExpense] = useState(false);
   const [issueItem, setIssueItem] = useState<OrderItem | null>(null);
   const [returnItem, setReturnItem] = useState<OrderItem | null>(null);
+  const [payOpen, setPayOpen] = useState(false);
   const { user } = useAuth();
   const canEdit = hasPerm(user, "orders.add_order");
+  const canPay = hasPerm(user, "clients.add_client");
 
   if (isLoading || !order) return <Spinner />;
   const c = order.calculation;
@@ -74,11 +76,21 @@ export default function OrderDetailPage() {
         <Stat label="К оплате" value={formatMoney(c.due)} />
       </div>
       <Card>
-        <CardBody className="flex items-center justify-between">
-          <span className="text-gray-600">Баланс клиента</span>
-          <span className={`text-lg font-semibold ${balanceColor(order.client_balance)}`}>
-            {formatMoney(order.client_balance)}
-          </span>
+        <CardBody>
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-gray-800">Оплата по заказу</h3>
+            {canPay && (
+              <Button variant="secondary" onClick={() => setPayOpen(true)}>
+                Принять оплату
+              </Button>
+            )}
+          </div>
+          <div className="mt-3 grid gap-4 sm:grid-cols-4">
+            <Stat label="К оплате" value={formatMoney(c.due)} />
+            <Stat label="Оплачено по заказу" value={formatMoney(order.paid)} />
+            <Stat label="Остаток" value={formatMoney(order.remaining)} highlight />
+            <Stat label="Баланс клиента" value={formatMoney(order.client_balance)} />
+          </div>
         </CardBody>
       </Card>
 
@@ -252,6 +264,16 @@ export default function OrderDetailPage() {
             .then(() => setIssueItem(null))
         }
       />
+      <PaymentModal
+        open={payOpen}
+        remaining={order.remaining}
+        onClose={() => setPayOpen(false)}
+        onSubmit={(body) =>
+          addMovement
+            .mutateAsync({ ...body, order: orderId, direction: "deposit" })
+            .then(() => setPayOpen(false))
+        }
+      />
       <ReturnModal
         item={returnItem}
         onClose={() => setReturnItem(null)}
@@ -315,6 +337,57 @@ function StatusHistory({ order }: { order: OrderDetail }) {
         )}
       </CardBody>
     </Card>
+  );
+}
+
+function PaymentModal({
+  open,
+  remaining,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean;
+  remaining: string;
+  onClose: () => void;
+  onSubmit: (body: Record<string, unknown>) => Promise<unknown>;
+}) {
+  const [amount, setAmount] = useState("");
+  const [method, setMethod] = useState("cash");
+  const [paidAt, setPaidAt] = useState(() => new Date().toISOString().slice(0, 10));
+  if (!open) return null;
+  return (
+    <Modal open onClose={onClose} title="Принять оплату по заказу">
+      <div className="space-y-3">
+        <div className="rounded-lg bg-gray-50 p-2 text-sm text-gray-600">
+          Остаток к оплате: {formatMoney(remaining)}{" "}
+          <button className="underline" onClick={() => setAmount(String(Number(remaining)))}>
+            подставить
+          </button>
+        </div>
+        <Field label="Сумма (₸)">
+          <MoneyInput value={amount} onChange={setAmount} />
+        </Field>
+        <Field label="Способ">
+          <Select value={method} onChange={(e) => setMethod(e.target.value)}>
+            <option value="cash">Наличные</option>
+            <option value="card">Карта</option>
+            <option value="terminal">Терминал</option>
+          </Select>
+        </Field>
+        <Field label="Дата">
+          <Input type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
+        </Field>
+        <Button
+          className="w-full"
+          disabled={!amount}
+          onClick={() =>
+            onSubmit({ amount, method, paid_at: paidAt, comment: "оплата по заказу" })
+          }
+        >
+          Принять
+        </Button>
+      </div>
+    </Modal>
   );
 }
 

@@ -21,6 +21,7 @@ const NAV: NavItem[] = [
   { to: "/reserves", label: "Резервы", show: (u) => hasPerm(u, PERM.reserves) },
   { to: "/users", label: "Пользователи", show: (u) => canManageUsers(u) },
   { to: "/roles", label: "Роли и права", show: (u) => canManageUsers(u) },
+  { to: "/audit", label: "Аудит", show: (u) => canManageUsers(u) },
 ];
 
 export default function Layout({ children }: { children: ReactNode }) {

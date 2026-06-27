@@ -11,6 +11,7 @@ from .services import (
     item_revenue,
     item_sold_qty,
     order_calculation,
+    order_paid,
     order_status,
 )
 
@@ -133,6 +134,8 @@ class OrderDetailSerializer(serializers.ModelSerializer):
         source="status_events", many=True, read_only=True
     )
     client_balance = serializers.SerializerMethodField()
+    paid = serializers.SerializerMethodField()
+    remaining = serializers.SerializerMethodField()
     tax_hint = serializers.SerializerMethodField()
 
     class Meta:
@@ -140,9 +143,17 @@ class OrderDetailSerializer(serializers.ModelSerializer):
         fields = [
             "id", "client", "client_name", "created_by", "notes", "is_archived",
             "created_at", "items", "expenses", "calculation", "status",
-            "status_history", "client_balance", "tax_hint",
+            "status_history", "client_balance", "paid", "remaining", "tax_hint",
         ]
         read_only_fields = ["created_at", "created_by"]
+
+    def get_paid(self, obj):
+        return order_paid(obj)
+
+    def get_remaining(self, obj):
+        from apps.common.money import money
+
+        return money(order_calculation(obj)["due"] - order_paid(obj))
 
     def get_calculation(self, obj):
         return order_calculation(obj)

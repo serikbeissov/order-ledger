@@ -29,7 +29,26 @@ SECRET_KEY = os.environ.get(
     "DJANGO_SECRET_KEY", "dev-insecure-key-change-me-in-production"
 )
 DEBUG = env_bool("DJANGO_DEBUG", True)
-ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "*").split(",")
+ALLOWED_HOSTS = [h.strip() for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "*").split(",") if h.strip()]
+
+# --- Прод-безопасность -------------------------------------------------------
+# Применяется, когда DEBUG выключен (реальный прод за Cloudflare Tunnel).
+# TLS терминируется в Cloudflare, к Django приходит http → доверяем заголовку
+# X-Forwarded-Proto от nginx/туннеля, иначе Secure-куки и редиректы сломаются.
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SESSION_COOKIE_HTTPONLY = True
+    # Редирект на https лучше держать на стороне Cloudflare ("Always Use HTTPS"),
+    # чтобы не словить петлю редиректов за туннелем. По умолчанию выключено.
+    SECURE_SSL_REDIRECT = env_bool("DJANGO_SSL_REDIRECT", False)
+    SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_HSTS_SECONDS", "2592000"))  # 30 дней
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SESSION_COOKIE_SAMESITE = "Lax"
+    CSRF_COOKIE_SAMESITE = "Lax"
 
 # --- Приложения --------------------------------------------------------------
 INSTALLED_APPS = [

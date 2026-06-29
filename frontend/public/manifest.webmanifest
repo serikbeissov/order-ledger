@@ -1,0 +1,16 @@
+{
+  "name": "Maison · Учёт заказов",
+  "short_name": "Maison",
+  "description": "Внутренний учёт заказов и движения денег.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#202020",
+  "theme_color": "#202020",
+  "lang": "ru",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
